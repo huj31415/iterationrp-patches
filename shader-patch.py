@@ -10,6 +10,13 @@ from pathlib import Path
 # Usage:
 # python patch_shader.py input.zip patch.diff output.zip
 
+# Thanks to u/Lavenderanus for fixing line ending errors on linux
+def normalize_line_endings(directory):
+    for ext in ("*.glsl", "*.properties"):
+        for path in Path(directory).rglob(ext):
+            content = path.read_bytes().replace(b"\r\n", b"\n")
+            path.write_bytes(content)
+
 def extract_zip(zip_path, directory):
     with zipfile.ZipFile(zip_path, 'r') as z:
         z.extractall(directory)
@@ -48,6 +55,9 @@ def patch_zip(input_zip, patch_file, output_zip):
         print("Extracting zip...")
         extract_zip(input_zip, extract_dir)
 
+        print("Normalizing line endings...")
+        normalize_line_endings(extract_dir)
+        
         print("Applying patch...")
         apply_patch(extract_dir, patch_file)
 
