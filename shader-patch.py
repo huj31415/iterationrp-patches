@@ -2,6 +2,7 @@ import zipfile
 import tempfile
 import subprocess
 import sys
+import shutil
 from pathlib import Path
 
 # To generate the patch file:
@@ -30,8 +31,10 @@ def create_zip(directory, zip_path):
 
 
 def apply_patch(directory, patch_file):
+    patch_exe = shutil.which("patch") or r"C:\Program Files\Git\usr\bin\patch.exe"
+
     result = subprocess.run(
-        ["patch", "-p2", "-i", str(patch_file)],
+        [patch_exe, "-p2", "-i", str(patch_file)],
         cwd=directory,
         capture_output=True,
         text=True
