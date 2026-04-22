@@ -1,0 +1,535 @@
+diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl
+index df803a1..80d4916 100644
+--- a/iterationRP Alpha 0.8.15/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl	
++++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl	
+@@ -62,12 +62,53 @@ vec3 RenderSunDisc(vec3 worldDir, vec3 sunDir){
+ }
+ 
+ vec3 RenderMoonDisc(vec3 worldDir, vec3 moonDir){
+-	const float angularRadius = SUN_ANGULAR_RADIUS / 180.0 * PI;
++	const float angularRadius = SUN_ANGULAR_RADIUS * PI / 180.0;
+ 
+-	float angle = facos(saturate(dot(worldDir, moonDir)));
++	float cosAngle = dot(worldDir, moonDir);
++	float angle = facos(clamp(cosAngle, -1.0, 1.0));
+ 
++	// Disc mask (soft edge)
+ 	float disc = float(angle <= angularRadius);
+-	return (vec3(0.8886, 1.0019, 1.3095) * NIGHT_BRIGHTNESS) * disc;
++
++	float phaseAngle = float(4 + moonPhase) * (-PI / 4.0);
++
++
++	vec3 tangent = normalize(cross(moonDir, vec3(0.0, 1.0, 0.0)));
++	vec3 binormal = cross(moonDir, tangent);
++	vec3 dirDiff = worldDir - moonDir;
++
++	float u = dot(dirDiff, tangent);
++	float v = dot(dirDiff, binormal);
++
++	u = u / (2.0 * angularRadius) + 0.5;
++	v = -v / (2.0 * angularRadius) + 0.5;
++	vec2 moonUV = vec2(u, v);
++
++	vec2 pos = 2.0 * moonUV - 1.0;
++	float r2 = dot(pos, pos); // we got 'em r2
++
++	vec3 moonDirLocal = normalize(vec3(pos.x, pos.y, sqrt(1.0 - r2)));
++
++	vec3 moonDirWorld = moonDirLocal.x * tangent - moonDirLocal.y * binormal - moonDirLocal.z * moonDir;
++
++	vec3 phaseSunDir = normalize(moonDir * cos(phaseAngle) + binormal * sin(phaseAngle));
++
++	float terminator = dot(normalize(moonDirWorld), phaseSunDir);
++
++	// Soft sunlit side
++	float phaseLight = smoothstep(-0.1, 0.05, terminator);
++
++	// Earthshine (dark side glow)
++	// float earthshine = smoothstep(-0.6, -0.1, terminator) * 0.08;
++
++	vec3 moonColor = vec3(0.8886, 1.0019, 1.3095);
++	vec3 earthshineColor = vec3(0.6, 0.7, 1.0) * 0.01; // subtle blue
++
++	vec3 color =
++			moonColor * phaseLight +
++			earthshineColor * (1 - phaseLight);
++
++	return color * disc * (PHASED_NIGHT_BRIGHTNESS + mix(0, 0.00001, float(moonPhase == 4)));
+ }
+ 
+ 
+@@ -311,7 +352,7 @@ vec3 GetSunIrradiance(
+ 		float sun_mu_s = dot(point, sun_direction) / r;
+ 		float moon_mu_s = dot(point, moon_direction) / r;
+ 
+-		moon_irradiance = (GetTransmittanceToSun(r, moon_mu_s) * (atmosphereModel_solar_irradiance * SUNLIGHT_INTENSITY * NIGHT_BRIGHTNESS)) * LMS;
++		moon_irradiance = (GetTransmittanceToSun(r, moon_mu_s) * (atmosphereModel_solar_irradiance * SUNLIGHT_INTENSITY * PHASED_NIGHT_BRIGHTNESS)) * LMS;
+ 		return (GetTransmittanceToSun(r, sun_mu_s) * (atmosphereModel_solar_irradiance * SUNLIGHT_INTENSITY)) * LMS;
+ }
+ 
+@@ -328,9 +369,9 @@ vec3 GetSunAndSkyIrradiance(
+ 		float moon_mu_s = dot(point, moon_direction) / r;
+ 
+ 		sun_sky_irradiance = GetIrradiance(r, sun_mu_s) * LMS;
+-		moon_sky_irradiance = (GetIrradiance(r, moon_mu_s)) * NIGHT_BRIGHTNESS * LMS;
++		moon_sky_irradiance = (GetIrradiance(r, moon_mu_s)) * PHASED_NIGHT_BRIGHTNESS * LMS;
+ 
+-		moon_irradiance = (GetTransmittanceToSun(r, moon_mu_s) * (atmosphereModel_solar_irradiance * SUNLIGHT_INTENSITY * NIGHT_BRIGHTNESS)) * LMS;
++		moon_irradiance = (GetTransmittanceToSun(r, moon_mu_s) * (atmosphereModel_solar_irradiance * SUNLIGHT_INTENSITY * PHASED_NIGHT_BRIGHTNESS)) * LMS;
+ 		return (GetTransmittanceToSun(r, sun_mu_s) * (atmosphereModel_solar_irradiance * SUNLIGHT_INTENSITY)) * LMS;
+ 
+ }
+@@ -413,7 +454,7 @@ vec3 GetSkyRadiance(
+ 			float moon_mu_s = dot(planet_surface, moon_direction) / r;
+ 
+ 			vec3 sky_irradiance = GetIrradiance(r, sun_mu_s);
+-			sky_irradiance += GetIrradiance(r, moon_mu_s) * NIGHT_BRIGHTNESS;
++			sky_irradiance += GetIrradiance(r, moon_mu_s) * PHASED_NIGHT_BRIGHTNESS;
+ 			vec3 sun_irradiance = atmosphereModel_solar_irradiance * GetTransmittanceToSun(r, sun_mu_s);
+ 
+ 			float d = distance(camera, planet_surface);
+@@ -425,10 +466,10 @@ vec3 GetSkyRadiance(
+ 
+ 
+ 		vec3 rayleigh = sun_scattering * RayleighPhaseFunction(sun_nu)
+-					 + moon_scattering * RayleighPhaseFunction(moon_nu) * NIGHT_BRIGHTNESS;
++					 + moon_scattering * RayleighPhaseFunction(moon_nu) * PHASED_NIGHT_BRIGHTNESS;
+ 
+ 		vec3 mie = sun_single_mie_scattering * MiePhaseFunction(atmosphereModel_mie_phase_function_g, sun_nu)
+-				+ moon_single_mie_scattering * MiePhaseFunction(atmosphereModel_mie_phase_function_g, moon_nu) * NIGHT_BRIGHTNESS;
++				+ moon_single_mie_scattering * MiePhaseFunction(atmosphereModel_mie_phase_function_g, moon_nu) * PHASED_NIGHT_BRIGHTNESS;
+ 
+ 		rayleigh = mix(rayleigh,  vec3(Luminance(rayleigh)) * atmosphereModel_solar_irradiance, wetness * 0.5);
+ 
+@@ -493,10 +534,10 @@ vec3 GetSkyRadianceToPoint(
+ 		moon_single_mie_scattering = moon_single_mie_scattering * smoothstep(0.0, 0.01, moon_mu_s);
+ 
+ 		vec3 rayleigh = sun_scattering * RayleighPhaseFunction(sun_nu)
+-					 + moon_scattering * RayleighPhaseFunction(moon_nu) * NIGHT_BRIGHTNESS;
++					 + moon_scattering * RayleighPhaseFunction(moon_nu) * PHASED_NIGHT_BRIGHTNESS;
+ 
+ 		vec3 mie = sun_single_mie_scattering * MiePhaseFunction(atmosphereModel_mie_phase_function_g, sun_nu)
+-				+ moon_single_mie_scattering * MiePhaseFunction(atmosphereModel_mie_phase_function_g, moon_nu) * NIGHT_BRIGHTNESS;
++				+ moon_single_mie_scattering * MiePhaseFunction(atmosphereModel_mie_phase_function_g, moon_nu) * PHASED_NIGHT_BRIGHTNESS;
+ 
+ 		rayleigh = mix(rayleigh, vec3(Luminance(rayleigh)) * atmosphereModel_solar_irradiance, wetness * 0.5);
+ 
+diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/IndividualFunctions/DOF.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/IndividualFunctions/DOF.glsl
+index d1e9be7..796911e 100644
+--- a/iterationRP Alpha 0.8.15/shaders/Lib/IndividualFunctions/DOF.glsl	
++++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/IndividualFunctions/DOF.glsl	
+@@ -6,9 +6,9 @@ float CalculateCoCRadius(float f, float d, float a){
+ 
+ float GetLinearDepth(vec2 coord){
+ 	#if defined SUPER_RESOLUTION || defined CUSTOM_RENDER_RESOLUTION
+-		float depth = textureLod(depthtex0, coord * fsrRenderScale, 0.0).x;
++		float depth = textureLod(depthtex1, coord * fsrRenderScale, 0.0).x;
+ 	#else
+-		float depth = textureLod(depthtex0, coord, 0.0).x;
++		float depth = textureLod(depthtex1, coord, 0.0).x;
+ 	#endif
+ 
+ 	#ifdef LOD_RENDERING
+diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/IndividualFunctions/NUBIS.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/IndividualFunctions/NUBIS.glsl
+index f64dbdb..af7acbc 100644
+--- a/iterationRP Alpha 0.8.15/shaders/Lib/IndividualFunctions/NUBIS.glsl	
++++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/IndividualFunctions/NUBIS.glsl	
+@@ -16,10 +16,9 @@ vec2 SampleDensity(vec4 cloudPos, vec3 windDirection, bool sampleDetail){
+ 	//Coverage
+ 		float coverageNoise = textureLod(CloudNoise3D, cloudPos.xyz * vec3(8.5e-5, 1e-5, 8.5e-5) + windDirection + CLOUD_COVERAGE_NOISE_OFFSET, 0.0).x;
+ 
+-		float coverage = mix(CLOUD_CLEAR_COVERY, CLOUD_RAIN_COVERY, wetness);
+-		coverage = remapSaturate(1.0 - coverageNoise, coverage * 0.2, coverage);
++		float coverage = remapSaturate(1.0 - coverageNoise, FINAL_CLOUD_COVERAGE * 0.2, FINAL_CLOUD_COVERAGE);
+ 
+-		baseDensity = remapSaturate(baseDensity, coverage, 1.0); 
++		baseDensity = (FINAL_CLOUD_COVERAGE == 0) ? 0 : remapSaturate(baseDensity, coverage, 1.0);
+ 
+ 	//Density Control
+ 		baseDensity *= curve(saturate(cloudPos.w * 1.8 - 0.8)) * 2.0 + 1.0;
+@@ -196,16 +195,31 @@ void NubisCumulus(inout vec3 color, vec3 worldDir, vec2 cloudAltitude, vec3 colo
+ }
+ 
+ 
+-float CloudShadowTex(vec2 coord, vec2 cloudAltitude, vec3 windDirection){
+-	coord = coord * CLOUD_SHADOW_RANGE - (CLOUD_SHADOW_RANGE * 0.5);
+-	vec4 checkPos = vec4(coord.x + cameraPosition.x, 0.0, coord.y + cameraPosition.z, 0.0);
++float CloudShadowTex(vec3 worldPos){
++
++	vec2 cloudAltitude = vec2(mix(CLOUD_CLEAR_ALTITUDE, CLOUD_RAIN_ALTITUDE, wetness));
++	cloudAltitude.y += mix(CLOUD_CLEAR_THICKNESS, CLOUD_RAIN_THICKNESS, wetness);
+ 	float thickness = cloudAltitude.y - cloudAltitude.x;
++	if (worldPos.y + cameraPosition.y > cloudAltitude.x) return 1.0;
++	float wind = 0.0005 * (windTime * CLOUD_SPEED + 10.0 * FTC_OFFSET);
++	vec3 windDirection = vec3(1.0, -0.05, -0.4) * wind;
++	#ifdef NO_COMPOSITE_VS
++		vec3 worldShadowVector = shadowModelViewInverse2;
++	#endif
++	vec2 coord = worldPos.xz - worldShadowVector.xz * ((worldPos.y + cameraPosition.y) / worldShadowVector.y);
++
++	vec4 checkPos = vec4(coord.x + cameraPosition.x, 0.0, coord.y + cameraPosition.z, 0.0);
+ 
+ 	checkPos += vec4(worldShadowVector * ((cloudAltitude.x + thickness * 0.25) / worldShadowVector.y) , 0.25);
+ 	float cloudDensity = SampleDensity(checkPos, windDirection, false).y;
+-	
++
+ 	checkPos += vec4(worldShadowVector * ((thickness * 0.25) / worldShadowVector.y) , 0.25);
+ 	cloudDensity = max(cloudDensity, SampleDensity(checkPos, windDirection, false).y);
+ 
+-	return exp2(-cloudDensity * 20.0);
++	float cloudShadowDamping = smoothstep(0, 0.05, .25 - abs(shadowAngle - 0.25));
++
++	// return mix(1.0, exp2(-cloudDensity * 20.0), cloudShadowDamping);
++	// return exp2(-cloudDensity * 20.0);
++	// return exp2(-smoothstep(0,1,cloudDensity) * 20.0);
++	return mix(1 - FINAL_CLOUD_COVERAGE, exp2(-smoothstep(0,1,cloudDensity) * 20.0), cloudShadowDamping);
+ }
+\ No newline at end of file
+diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/IndividualFunctions/PlanarClouds.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/IndividualFunctions/PlanarClouds.glsl
+index 1682856..1217fda 100644
+--- a/iterationRP Alpha 0.8.15/shaders/Lib/IndividualFunctions/PlanarClouds.glsl	
++++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/IndividualFunctions/PlanarClouds.glsl	
+@@ -110,10 +110,10 @@ void PlanarClouds(inout vec3 color, vec3 worldDir, vec3 colorSun, vec3 colorSky,
+ 	float intersection = RaySphereIntersection(rayStartPos, worldDir, planetRadius + PC_ALTITUDE).y;
+ 
+ 	if (intersection > 0.0){
+-		float wind = 2.5 * (frameTimeCounter * CLOUD_SPEED + 10.0 * FTC_OFFSET);
++		float wind = 2.5 * (windTime * CLOUD_SPEED + 10.0 * FTC_OFFSET);
+ 		vec2 windDirection = vec2(-wind, wind * 0.2);
+ 
+-		vec2 coverageDensity = mix(vec2(PC_CLEAR_COVERAGE, PC_CLEAR_DENSITY), vec2(PC_RAIN_COVERAGE, PC_RAIN_DENSITY), wetness);
++		vec2 coverageDensity = mix(vec2(FINAL_PC_COVERAGE, PC_CLEAR_DENSITY), vec2(PC_RAIN_COVERAGE, PC_RAIN_DENSITY), wetness);
+ 
+ 		float VdotL = dot(worldDir, worldShadowVector) * 0.5 + 0.5;
+ 
+diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/IndividualFunctions/VolumetricFog.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/IndividualFunctions/VolumetricFog.glsl
+index c96a042..af5ead0 100644
+--- a/iterationRP Alpha 0.8.15/shaders/Lib/IndividualFunctions/VolumetricFog.glsl	
++++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/IndividualFunctions/VolumetricFog.glsl	
+@@ -1,4 +1,6 @@
+-
++#ifdef CLOUD_SHADOW
++	#include "/Lib/IndividualFunctions/NUBIS.glsl"
++#endif
+ 
+ #if VFOG_NOISE_TYPE == 0
+ 
+@@ -31,10 +33,13 @@ float Get3DNoise(vec3 pos){
+ 
+ float FogDensity(vec3 fogPos, float baseDensity, float fogTimeFactor, vec3 wind){
+ 	const float maxHeight = max(VFOG_HEIGHT, VFOG_HEIGHT_2);
++	const float minHeight = min(VFOG_HEIGHT, VFOG_HEIGHT_2);
+ 
+-	float dh = abs(fogPos.y - maxHeight);
+-	dh *= (2.5 / VFOG_FALLOFF) * (1.0 - fogTime.y * 0.5);
+-	float falloff = exp2(-dh);
++	vec2 dh = vec2(abs(fogPos.y - maxHeight), max(fogPos.y - maxHeight, 0.0) + max(minHeight - fogPos.y, 0.0));
++	dh *= (vec2(2.5, 2.0) / VFOG_FALLOFF) * (1.0 - fogTime.y * 0.5);
++	vec2 falloff2 = exp2(-dh);
++	float falloff = falloff2.x;
++	float heightDensity = falloff2.y * .15;
+  
+ 	
+ 	fogPos = fogPos * vec3(0.2, 0.05, 0.2) + wind;
+@@ -60,7 +65,7 @@ float FogDensity(vec3 fogPos, float baseDensity, float fogTimeFactor, vec3 wind)
+ 	//density  = density * density;
+ 	density *= density * falloff;
+ 
+-	density = (density * VFOG_DENSITY + baseDensity) * fogTimeFactor;
++	density = ((heightDensity + density) * VFOG_DENSITY + baseDensity) * fogTimeFactor;
+ 
+ 	return density;
+ }
+@@ -68,9 +73,9 @@ float FogDensity(vec3 fogPos, float baseDensity, float fogTimeFactor, vec3 wind)
+ #endif
+ 
+ void VolumetricFog(inout vec3 color, vec3 startPos, vec3 endPos, vec3 worldDir, float globalCloudShadow, float fogTimeFactor){
+-	#if VFOG_NOISE_TYPE == 0
++	//#if VFOG_NOISE_TYPE == 0
+ 		fogTimeFactor *= fogTime.y * 2.0 + 1.0;
+-	#endif
++	//#endif
+ 
+ 	#if defined TAA || defined SUPER_RESOLUTION
+ 		float noise = BlueNoiseTemporal().y;
+@@ -112,7 +117,7 @@ void VolumetricFog(inout vec3 color, vec3 startPos, vec3 endPos, vec3 worldDir,
+ 	float phases = HenyeyGreenstein(VdotL, 0.65) * 0.7 + 0.035;
+ 
+ 	#if VFOG_NOISE_TYPE > 0
+-		float windTimer = (frameTimeCounter * CLOUD_SPEED + 10.0 * FTC_OFFSET);
++		float windTimer = (windTime * CLOUD_SPEED + 10.0 * FTC_OFFSET);
+ 		vec3 wind = (vec3(0.6, -0.05, -1.0) * 0.1) * windTimer;
+ 	#endif
+ 
+@@ -179,25 +184,24 @@ void VolumetricFog(inout vec3 color, vec3 startPos, vec3 endPos, vec3 worldDir,
+ 			#endif
+ 		}
+ 
+-/*
+ 		#ifdef VOLUMETRIC_CLOUDS
+ 			#ifdef CLOUD_SHADOW
+ 				#ifdef VFOG_CLOUD_SHADOW
+-					float cloudShadow = CloudShadowFromTex(fogPos - cameraPosition);
++					float cloudShadow = CloudShadowTex(fogPos - cameraPosition);
+ 				#endif
+ 			#endif
+ 		#endif
+-*/
++
+ 		
+ 		float integral = transmittance - absorption * transmittance;
+ 		stepRayDensity *= integral;
+ 
+-		//#if defined VOLUMETRIC_CLOUDS && defined CLOUD_SHADOW && defined VFOG_CLOUD_SHADOW
+-		//	stepRayDensity *= mix(cloudShadow, 1.0, wetness * 0.1 + 0.03);
+-		//	fogDensity += integral * mix(cloudShadow, 1.0, wetness * 0.3 + 0.7);
+-		//#else
++		#if defined VOLUMETRIC_CLOUDS && defined CLOUD_SHADOW && defined VFOG_CLOUD_SHADOW
++			stepRayDensity *= mix(cloudShadow, 1.0, wetness * 0.1 + 0.03);
++			fogDensity += integral * mix(cloudShadow, 1.0, wetness * 0.3 + 0.7);
++		#else
+ 			fogDensity += integral;
+-		//#endif
++		#endif
+ 
+ 		rayDensity += stepRayDensity * shadow;
+ 
+diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl
+index 2f34b0d..c0a1a22 100644
+--- a/iterationRP Alpha 0.8.15/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl	
++++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl	
+@@ -259,15 +259,8 @@ vec3 DiffuseTracing(float depth, vec3 vertexNormal, vec3 worldNormal, vec2 light
+ 
+ 	#endif
+ 
+-	#ifdef LOD_RENDERING
+-
+-		if (clamp(hitVoxelPos, vec3(0.0), vec3(voxelResolution)) != hitVoxelPos && depth < 1.0){		
+-
+-	#else
+-
+ 		if (clamp(hitVoxelPos, vec3(0.0), vec3(voxelResolution)) != hitVoxelPos){
+ 
+-	#endif
+ 
+ 			#if defined DIMENSION_OVERWORLD || defined DIMENSION_END
+ 				diffuse = SkyLighting(rayDir, pdf, lightmap.y);
+diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/Programs/Composite/PixelData_VS.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Composite/PixelData_VS.glsl
+index 9c55e39..70a9de1 100644
+--- a/iterationRP Alpha 0.8.15/shaders/Lib/Programs/Composite/PixelData_VS.glsl	
++++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Composite/PixelData_VS.glsl	
+@@ -44,11 +44,11 @@ void main(){
+ 				if (heldItemId != 11000.0 && centerMaterialID == MATID_HAND){
+ 					centerDepth = texelFetch(depthtex2, centerTexelCoord, 0).x;
+ 				}else{
+-					centerDepth = texelFetch(depthtex0, centerTexelCoord, 0).x;
++					centerDepth = texelFetch(depthtex1, centerTexelCoord, 0).x;
+ 				}
+ 
+ 			#else
+-				float centerDepth = texelFetch(depthtex0, centerTexelCoord, 0).x;
++				float centerDepth = texelFetch(depthtex1, centerTexelCoord, 0).x;
+ 
+ 			#endif
+ 
+diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl
+index 0c09673..143092c 100644
+--- a/iterationRP Alpha 0.8.15/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl	
++++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl	
+@@ -33,11 +33,11 @@ in vec2 fogTime;
+ 
+ vec3 HashStars(vec3 worldDir){
+ 	#if FSR2_SCALE >= 0
+-		const float scale = 300.0 - float(FSR2_SCALE) * 40.0;
+-		const float coverage = 0.007 + FSR2_SCALE * 0.003;
++		const float scale = 500.0 - float(FSR2_SCALE) * 40.0; // 300 -
++		const float coverage = 0.01 + FSR2_SCALE * 0.005; // 0.07 0.03
+ 	#else
+-		const float scale = 384.0;
+-		const float coverage = 0.007;
++		const float scale = 512.0; // 384
++		const float coverage = 0.01; // 0.007
+ 	#endif
+ 	const float maxLuminance = 0.05 * HASHSTARS_BRIGHTNESS;
+ 	const float minTemperature = 4000.0;
+@@ -57,7 +57,7 @@ vec3 HashStars(vec3 worldDir){
+ 	hash.y = 2.0 * hash.y - 4.0 * hash.y * hash.y + 3.0 * hash.y * hash.y * hash.y;
+ 
+ 	float c = remapSaturate(hash.x, 1.0 - coverage, 1.0);
+-	return (maxLuminance * remapSaturate(r, 0.25, 0.0) * c * c) * Blackbody(mix(minTemperature, maxTemperature, hash.y));
++	return (maxLuminance * remapSaturate(r, 0.125, 0.0) * c * c) * Blackbody(mix(minTemperature, maxTemperature, hash.y)); // .25
+ }
+ 
+ ////////////////////////////// Main //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+@@ -90,9 +90,9 @@ void main(){
+ 	vec2 cloudAltitude = vec2(mix(CLOUD_CLEAR_ALTITUDE, CLOUD_RAIN_ALTITUDE, wetness));
+ 	cloudAltitude.y += mix(CLOUD_CLEAR_THICKNESS, CLOUD_RAIN_THICKNESS, wetness);
+ 
+-	float wind = 0.0005 * (frameTimeCounter * CLOUD_SPEED + 10.0 * FTC_OFFSET);
++	float wind = 0.0005 * (windTime * CLOUD_SPEED + 10.0 * FTC_OFFSET);
+ 	//wind = 0.0005 * mod(frameTimeCounter * 50.0, 3600.0);
+-	vec3 windDirection = vec3(1.0, wetness * 0.1 - 0.05, -0.4) * wind;
++	vec3 windDirection = vec3(1.0, -0.05, -0.4) * wind;
+ 
+ 
+ //////////////////// Sky ///////////////////////////////////////////////////////////////////////////
+diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/Programs/Composite/Soild_FS.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Composite/Soild_FS.glsl
+index 38f4599..6378627 100644
+--- a/iterationRP Alpha 0.8.15/shaders/Lib/Programs/Composite/Soild_FS.glsl	
++++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Composite/Soild_FS.glsl	
+@@ -178,9 +178,14 @@ vec2 texCoord = gl_FragCoord.xy * UNIFORM_PIXEL_SIZE;
+ 	in vec3 shadowVector;
+ 
+ 	in vec3 colorShadowlight;
++	
+ #endif
+ 
+ 
++#if defined CLOUD_SHADOW && defined DIMENSION_OVERWORLD
++	#include "/Lib/IndividualFunctions/NUBIS.glsl"
++#endif
++
+ #include "/Lib/GbufferData.glsl"
+ #include "/Lib/Uniform/GbufferTransforms.glsl"
+ 
+@@ -551,18 +556,15 @@ void main(){
+ 			float shadowmapRange = saturate(3.2 - opaqueDist / min(shadowDistance, far) * 4.0);
+ 		#endif
+ 
+-	/*
+-		#ifdef VOLUMETRIC_CLOUDS
++		#if defined VOLUMETRIC_CLOUDS && defined DIMENSION_OVERWORLD
+ 			#ifdef CLOUD_SHADOW
+-				float cloudShadow = CloudShadowFromTex(worldPos);
++				float cloudShadow = CloudShadowTex(worldPos);
+ 			#else
+ 				float cloudShadow = 1.0 - wetness * RAIN_SHADOW;
+ 			#endif
+ 		#else
+ 			float cloudShadow = 1.0 - wetness * RAIN_SHADOW;
+ 		#endif
+-	*/
+-		float cloudShadow = 1.0 - wetness * RAIN_SHADOW;
+ 
+ 		gbuffer.material.scattering *= saturate(1.0 - materialMask.leaves - materialMask.grass);
+ 		gbuffer.worldNormal = normalize(mix(gbuffer.worldNormal, vec3(0.0, 1.0, 0.0), materialMask.grass * 0.49));
+diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/Programs/Final_FS.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Final_FS.glsl
+index ab70f1c..146800e 100644
+--- a/iterationRP Alpha 0.8.15/shaders/Lib/Programs/Final_FS.glsl	
++++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Final_FS.glsl	
+@@ -1153,8 +1153,18 @@ if (angle <= 1.0){
+ }
+ 
+ //*/
+-
+-
++#ifdef DEBUG_DEPTH
++if (all(lessThan(gl_FragCoord.xy, ivec2(100)))) {
++	color = texelFetch(pixelData2D, ivec2(PIXELDATA_CENTER_DEPTH, 0), 0).xxx / 128;
++} else if (all(lessThan(gl_FragCoord.xy, screenSize / 3))) {
++	ivec2 depthCoord = ivec2(gl_FragCoord.xy * 3 * fsrRenderScale);
++	float depth = texelFetch(depthtex1, depthCoord, 0).x;
++	if (depth == 1.0) {
++		depth = ScreenDepth_From_LODScreenDepth(texelFetch(LOD_DEPTH_TEX_1, depthCoord, 0).x);
++	}
++	color = vec3(2 * near / (far + near - (far - near) * depth));
++}
++#endif
+ 	gl_FragData[0] = vec4(color, 0.0);
+ 
+ 
+diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl
+index 481def2..718ebe7 100644
+--- a/iterationRP Alpha 0.8.15/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl	
++++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl	
+@@ -25,7 +25,8 @@ void voxy_emitFragment(VoxyFragmentParameters parameters){
+ 	vec4 albedo = parameters.sampledColour * parameters.tinting;
+ 
+ //lightmap
+-	vec2 blockLight = saturate(parameters.lightMap * 16.0 / 15.0 - 0.5 / 15.0);
++	bool isWater = parameters.customId == 6000.0;
++	vec2 blockLight = saturate(parameters.lightMap * 16.0 / 15.0 - 0.5 / 15.0) * float(isWater);
+ 
+ //TBN
+ 	vec3 N = vec3(
+@@ -41,7 +42,6 @@ void voxy_emitFragment(VoxyFragmentParameters parameters){
+ 
+ //material
+ 	float materialIDs = MATID_STAINEDGLASS;
+-	bool isWater = parameters.customId == 6000.0;
+ 
+ //normal
+ 	vec3 waterNormal = tbn[2];
+diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/Settings.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Settings.glsl
+index fe91b31..e2d2761 100644
+--- a/iterationRP Alpha 0.8.15/shaders/Lib/Settings.glsl	
++++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Settings.glsl	
+@@ -744,6 +744,7 @@ const float monocleFix = 0.0 / 0.0;
+ 
+ //DEBUG---------------------------------
+ 	#define WHITE_DEBUG_WORLD 0 // [0 1 2 3 4 5 6 7 8 9 10]
++	//#define DEBUG_DEPTH
+   //#define DEBUG_COUNTER
+   //#define DISABLE_NIGHTVISION
+   //#define DISABLE_BLINDNESS_DARKNESS
+diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/UniformDeclare.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/UniformDeclare.glsl
+index 6a97d6e..4b9f226 100644
+--- a/iterationRP Alpha 0.8.15/shaders/Lib/UniformDeclare.glsl	
++++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/UniformDeclare.glsl	
+@@ -7,10 +7,15 @@ uniform int heldBlockLightValue;
+ uniform int heldItemId2;
+ uniform int heldBlockLightValue2;
+ uniform int worldTime;
++uniform int worldDay;
++uniform int moonPhase;
++const float PHASED_NIGHT_BRIGHTNESS = NIGHT_BRIGHTNESS * (pow(abs(4 - moonPhase) / 4.0, 2.2) + float(moonPhase == 4) * 0.005);
+ uniform int frameCounter;
+ uniform float frameTime;
+ uniform float frameTimeCounter;
++const float windTime = (worldDay % 180 * 1200.0 + worldTime * 0.05);
+ uniform float sunAngle;
++uniform float shadowAngle;
+ uniform float aspectRatio;
+ uniform float viewWidth;
+ uniform float viewHeight;
+@@ -32,6 +37,26 @@ uniform int hideGUI;
+ uniform float darknessFactor;
+ uniform float darknessLightFactor;
+ 
++vec2 weatherHash(vec2 n) {
++	return fract(sin(n) * 43758.5453);
++}
++// daily cumulus cloud coverage centered on CLOUD_CLEAR_COVERY
++// set max coverage to 1
++const float coverDeviation = (1 - CLOUD_CLEAR_COVERY);
++const vec2 weather = weatherHash(vec2(worldDay, worldDay + 1)) * 2.0 - 1.0;
++const float weatherBlend = smoothstep(0, 1, worldTime / 24000.0);
++// blend coverage between days centered around clear coverage setting
++const float DAILY_COVERAGE = clamp(
++	mix(weather.x, weather.y, weatherBlend) * coverDeviation + CLOUD_CLEAR_COVERY, 0.0, 1.0
++);
++const float FINAL_CLOUD_COVERAGE = mix(DAILY_COVERAGE, CLOUD_RAIN_COVERY, wetness);
++
++// planar clouds max coverage PC_CLEAR_COVERAGE
++const vec2 PC_weather = weatherHash(vec2(worldDay + 0.5, worldDay + 1.5));
++const float FINAL_PC_COVERAGE = clamp(
++	mix(PC_weather.x, PC_weather.y, weatherBlend) * PC_CLEAR_COVERAGE, 0.1, 1.0
++);
++
+ uniform vec2 taaJitter;
+ uniform vec2 taaJitterToPrevious;
+ uniform vec2 previousTaaJitter;
+diff --git a/iterationRP Alpha 0.8.15/shaders/shaders.properties b/iterationRP Alpha 0.8.15-modified/shaders/shaders.properties
+index 60df0a9..3fd859a 100644
+--- a/iterationRP Alpha 0.8.15/shaders/shaders.properties	
++++ b/iterationRP Alpha 0.8.15-modified/shaders/shaders.properties	
+@@ -1168,7 +1168,7 @@ screen.SCREENSHOT = INFO_RES <empty> RENDERING_MODE [ANIMATION] DISABLE_SKY_REND
+ 
+ screen.DEBUG =  DEBUG_COUNTER              PT_TRACING_EYE \
+ 				WHITE_DEBUG_WORLD          DEBUG_IRC \
+-				<empty>                    PT_TEMP_COORD_OFFSET \
++				DEBUG_DEPTH                PT_TEMP_COORD_OFFSET \
+ 				FTC_OFFSET                 <empty> \
+ 				CLOUD_SPEED                DEBUG_RTW \
+ 				<empty>                    <empty> \
