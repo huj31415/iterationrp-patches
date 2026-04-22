@@ -6,7 +6,9 @@
 4. Open a terminal in the folder or cd to it (`cd path/to/extracted/folder`)
 5. Run the command below. You might need to do it using bash (you can get it from [git](https://git-scm.com/install/windows)) instead of windows cmd if you get a file not found error. Use `itrp-patch-18.diff` for 0.8.18, `itrp-patch-16.diff` for 0.8.13~0.8.16 (does not implement settings)
 
-```python shader-patch.py "iterationRP Alpha <ver>.zip" "itrp-patch-18.diff" "<ver>-patched.zip"```
+```python shader-patch.py "iterationRP Alpha (ver).zip" "itrp-patch-(ver).diff" "(ver)-patched.zip"```
+
+6. Move the patched shader output to your shaderpacks folder and enjoy!
 
 
 ## Generating a diff
