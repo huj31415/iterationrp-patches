@@ -8,7 +8,7 @@ from pathlib import Path
 # git diff --no-index original_shader_folder patched_shader_folder > patch.diff
 
 # Usage:
-# python patch_shader.py input.zip patch.diff output.zip
+# python shader-patch.py input.zip patch.diff output.zip
 
 # Thanks to u/Lavenderanus for fixing line ending errors on linux
 def normalize_line_endings(directory):
@@ -70,7 +70,7 @@ def patch_zip(input_zip, patch_file, output_zip):
 def main():
     if len(sys.argv) != 4:
         print("Usage:")
-        print("python patch_shader.py input.zip patch.diff output.zip")
+        print("python shader-patch.py input.zip patch.diff output.zip")
         sys.exit(1)
 
     input_zip = Path(sys.argv[1])
