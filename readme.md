@@ -12,9 +12,9 @@
 
 
 ## Generating a diff
-Requires git, you don't need to do this if you are using the provided patches
+Now uses gnu diff
 
-```git diff --no-index "original-unzipped-folder" "patched-unzipped-folder" > patch.diff```
+```diff -rua --strip-trailing-cr "original-unzipped-folder" "patched-unzipped-folder" > patch.diff```
 
 ## Patches (2026.4.22)
 * Daily variable cloud cover for both volumetric and 2D clouds independently
@@ -26,4 +26,5 @@ Requires git, you don't need to do this if you are using the provided patches
 * Fix lighting on voxy LODs
 * Blend noise fog with height based fog
 * Fix DOF for stained glass (focuses and blurs based on background depth instead of glass depth)
+* Add leaves SSS mult (adjusts how far light penetrates into leaves), default to 2.5* original
 * Supports IterationRP Alpha 0.8.10~0.8.18, future versions may require manual patching
