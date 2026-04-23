@@ -20,6 +20,7 @@ Requires git, you don't need to do this if you are using the provided patches
 * Daily variable cloud cover for both volumetric and 2D clouds independently
 * Cloud shadows from sun and moon affecting both ground and volumetric fog
   * Limit cloud shadow height to bottom of the cloud layer to prevent infinite shadow columns
+  * Also apply to diffuse lighting
 * World time based cloud movement (clouds movement based on tick speed)
 * Moon phase rendering and lighting, can be toggled and adjusted in settings
 * Fix lighting on voxy LODs
