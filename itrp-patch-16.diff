@@ -1,7 +1,7 @@
-diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl
+diff -rua --strip-trailing-cr '--exclude=.git' iterationRP Alpha 0.8.15/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl iterationRP Alpha 0.8.15-modified/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl
 index df803a1..80d4916 100644
---- a/iterationRP Alpha 0.8.15/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl	
-+++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl	
+--- iterationRP Alpha 0.8.15/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl	
++++ iterationRP Alpha 0.8.15-modified/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl	
 @@ -62,12 +62,53 @@ vec3 RenderSunDisc(vec3 worldDir, vec3 sunDir){
  }
  
@@ -115,10 +115,10 @@ index df803a1..80d4916 100644
  
  		rayleigh = mix(rayleigh, vec3(Luminance(rayleigh)) * atmosphereModel_solar_irradiance, wetness * 0.5);
  
-diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/IndividualFunctions/DOF.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/IndividualFunctions/DOF.glsl
+diff -rua --strip-trailing-cr '--exclude=.git' iterationRP Alpha 0.8.15/shaders/Lib/IndividualFunctions/DOF.glsl iterationRP Alpha 0.8.15-modified/shaders/Lib/IndividualFunctions/DOF.glsl
 index d1e9be7..796911e 100644
---- a/iterationRP Alpha 0.8.15/shaders/Lib/IndividualFunctions/DOF.glsl	
-+++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/IndividualFunctions/DOF.glsl	
+--- iterationRP Alpha 0.8.15/shaders/Lib/IndividualFunctions/DOF.glsl	
++++ iterationRP Alpha 0.8.15-modified/shaders/Lib/IndividualFunctions/DOF.glsl	
 @@ -6,9 +6,9 @@ float CalculateCoCRadius(float f, float d, float a){
  
  float GetLinearDepth(vec2 coord){
@@ -131,10 +131,10 @@ index d1e9be7..796911e 100644
  	#endif
  
  	#ifdef LOD_RENDERING
-diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/IndividualFunctions/NUBIS.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/IndividualFunctions/NUBIS.glsl
+diff -rua --strip-trailing-cr '--exclude=.git' iterationRP Alpha 0.8.15/shaders/Lib/IndividualFunctions/NUBIS.glsl iterationRP Alpha 0.8.15-modified/shaders/Lib/IndividualFunctions/NUBIS.glsl
 index f64dbdb..af7acbc 100644
---- a/iterationRP Alpha 0.8.15/shaders/Lib/IndividualFunctions/NUBIS.glsl	
-+++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/IndividualFunctions/NUBIS.glsl	
+--- iterationRP Alpha 0.8.15/shaders/Lib/IndividualFunctions/NUBIS.glsl	
++++ iterationRP Alpha 0.8.15-modified/shaders/Lib/IndividualFunctions/NUBIS.glsl	
 @@ -16,10 +16,9 @@ vec2 SampleDensity(vec4 cloudPos, vec3 windDirection, bool sampleDetail){
  	//Coverage
  		float coverageNoise = textureLod(CloudNoise3D, cloudPos.xyz * vec3(8.5e-5, 1e-5, 8.5e-5) + windDirection + CLOUD_COVERAGE_NOISE_OFFSET, 0.0).x;
@@ -186,10 +186,10 @@ index f64dbdb..af7acbc 100644
 +	return mix(1 - FINAL_CLOUD_COVERAGE, exp2(-smoothstep(0,1,cloudDensity) * 20.0), cloudShadowDamping);
  }
 \ No newline at end of file
-diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/IndividualFunctions/PlanarClouds.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/IndividualFunctions/PlanarClouds.glsl
+diff -rua --strip-trailing-cr '--exclude=.git' iterationRP Alpha 0.8.15/shaders/Lib/IndividualFunctions/PlanarClouds.glsl iterationRP Alpha 0.8.15-modified/shaders/Lib/IndividualFunctions/PlanarClouds.glsl
 index 1682856..1217fda 100644
---- a/iterationRP Alpha 0.8.15/shaders/Lib/IndividualFunctions/PlanarClouds.glsl	
-+++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/IndividualFunctions/PlanarClouds.glsl	
+--- iterationRP Alpha 0.8.15/shaders/Lib/IndividualFunctions/PlanarClouds.glsl	
++++ iterationRP Alpha 0.8.15-modified/shaders/Lib/IndividualFunctions/PlanarClouds.glsl	
 @@ -110,10 +110,10 @@ void PlanarClouds(inout vec3 color, vec3 worldDir, vec3 colorSun, vec3 colorSky,
  	float intersection = RaySphereIntersection(rayStartPos, worldDir, planetRadius + PC_ALTITUDE).y;
  
@@ -203,10 +203,10 @@ index 1682856..1217fda 100644
  
  		float VdotL = dot(worldDir, worldShadowVector) * 0.5 + 0.5;
  
-diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/IndividualFunctions/VolumetricFog.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/IndividualFunctions/VolumetricFog.glsl
+diff -rua --strip-trailing-cr '--exclude=.git' iterationRP Alpha 0.8.15/shaders/Lib/IndividualFunctions/VolumetricFog.glsl iterationRP Alpha 0.8.15-modified/shaders/Lib/IndividualFunctions/VolumetricFog.glsl
 index c96a042..af5ead0 100644
---- a/iterationRP Alpha 0.8.15/shaders/Lib/IndividualFunctions/VolumetricFog.glsl	
-+++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/IndividualFunctions/VolumetricFog.glsl	
+--- iterationRP Alpha 0.8.15/shaders/Lib/IndividualFunctions/VolumetricFog.glsl	
++++ iterationRP Alpha 0.8.15-modified/shaders/Lib/IndividualFunctions/VolumetricFog.glsl	
 @@ -1,4 +1,6 @@
 -
 +#ifdef CLOUD_SHADOW
@@ -295,10 +295,10 @@ index c96a042..af5ead0 100644
  
  		rayDensity += stepRayDensity * shadow;
  
-diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl
+diff -rua --strip-trailing-cr '--exclude=.git' iterationRP Alpha 0.8.15/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl
 index 2f34b0d..c0a1a22 100644
---- a/iterationRP Alpha 0.8.15/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl	
-+++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl	
+--- iterationRP Alpha 0.8.15/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl	
++++ iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl	
 @@ -259,15 +259,8 @@ vec3 DiffuseTracing(float depth, vec3 vertexNormal, vec3 worldNormal, vec2 light
  
  	#endif
@@ -315,10 +315,10 @@ index 2f34b0d..c0a1a22 100644
  
  			#if defined DIMENSION_OVERWORLD || defined DIMENSION_END
  				diffuse = SkyLighting(rayDir, pdf, lightmap.y);
-diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/Programs/Composite/PixelData_VS.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Composite/PixelData_VS.glsl
+diff -rua --strip-trailing-cr '--exclude=.git' iterationRP Alpha 0.8.15/shaders/Lib/Programs/Composite/PixelData_VS.glsl iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Composite/PixelData_VS.glsl
 index 9c55e39..70a9de1 100644
---- a/iterationRP Alpha 0.8.15/shaders/Lib/Programs/Composite/PixelData_VS.glsl	
-+++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Composite/PixelData_VS.glsl	
+--- iterationRP Alpha 0.8.15/shaders/Lib/Programs/Composite/PixelData_VS.glsl	
++++ iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Composite/PixelData_VS.glsl	
 @@ -44,11 +44,11 @@ void main(){
  				if (heldItemId != 11000.0 && centerMaterialID == MATID_HAND){
  					centerDepth = texelFetch(depthtex2, centerTexelCoord, 0).x;
@@ -333,10 +333,10 @@ index 9c55e39..70a9de1 100644
  
  			#endif
  
-diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl
+diff -rua --strip-trailing-cr '--exclude=.git' iterationRP Alpha 0.8.15/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl
 index 0c09673..143092c 100644
---- a/iterationRP Alpha 0.8.15/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl	
-+++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl	
+--- iterationRP Alpha 0.8.15/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl	
++++ iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl	
 @@ -33,11 +33,11 @@ in vec2 fogTime;
  
  vec3 HashStars(vec3 worldDir){
@@ -374,10 +374,10 @@ index 0c09673..143092c 100644
  
  
  //////////////////// Sky ///////////////////////////////////////////////////////////////////////////
-diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/Programs/Composite/Soild_FS.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Composite/Soild_FS.glsl
+diff -rua --strip-trailing-cr '--exclude=.git' iterationRP Alpha 0.8.15/shaders/Lib/Programs/Composite/Soild_FS.glsl iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Composite/Soild_FS.glsl
 index 38f4599..6378627 100644
---- a/iterationRP Alpha 0.8.15/shaders/Lib/Programs/Composite/Soild_FS.glsl	
-+++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Composite/Soild_FS.glsl	
+--- iterationRP Alpha 0.8.15/shaders/Lib/Programs/Composite/Soild_FS.glsl	
++++ iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Composite/Soild_FS.glsl	
 @@ -178,9 +178,14 @@ vec2 texCoord = gl_FragCoord.xy * UNIFORM_PIXEL_SIZE;
  	in vec3 shadowVector;
  
@@ -414,10 +414,10 @@ index 38f4599..6378627 100644
  
  		gbuffer.material.scattering *= saturate(1.0 - materialMask.leaves - materialMask.grass);
  		gbuffer.worldNormal = normalize(mix(gbuffer.worldNormal, vec3(0.0, 1.0, 0.0), materialMask.grass * 0.49));
-diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/Programs/Final_FS.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Final_FS.glsl
+diff -rua --strip-trailing-cr '--exclude=.git' iterationRP Alpha 0.8.15/shaders/Lib/Programs/Final_FS.glsl iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Final_FS.glsl
 index ab70f1c..146800e 100644
---- a/iterationRP Alpha 0.8.15/shaders/Lib/Programs/Final_FS.glsl	
-+++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Final_FS.glsl	
+--- iterationRP Alpha 0.8.15/shaders/Lib/Programs/Final_FS.glsl	
++++ iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Final_FS.glsl	
 @@ -1153,8 +1153,18 @@ if (angle <= 1.0){
  }
  
@@ -439,10 +439,10 @@ index ab70f1c..146800e 100644
  	gl_FragData[0] = vec4(color, 0.0);
  
  
-diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl
+diff -rua --strip-trailing-cr '--exclude=.git' iterationRP Alpha 0.8.15/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl
 index 481def2..718ebe7 100644
---- a/iterationRP Alpha 0.8.15/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl	
-+++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl	
+--- iterationRP Alpha 0.8.15/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl	
++++ iterationRP Alpha 0.8.15-modified/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl	
 @@ -25,7 +25,8 @@ void voxy_emitFragment(VoxyFragmentParameters parameters){
  	vec4 albedo = parameters.sampledColour * parameters.tinting;
  
@@ -461,10 +461,10 @@ index 481def2..718ebe7 100644
  
  //normal
  	vec3 waterNormal = tbn[2];
-diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/Settings.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Settings.glsl
+diff -rua --strip-trailing-cr '--exclude=.git' iterationRP Alpha 0.8.15/shaders/Lib/Settings.glsl iterationRP Alpha 0.8.15-modified/shaders/Lib/Settings.glsl
 index fe91b31..e2d2761 100644
---- a/iterationRP Alpha 0.8.15/shaders/Lib/Settings.glsl	
-+++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/Settings.glsl	
+--- iterationRP Alpha 0.8.15/shaders/Lib/Settings.glsl	
++++ iterationRP Alpha 0.8.15-modified/shaders/Lib/Settings.glsl	
 @@ -744,6 +744,7 @@ const float monocleFix = 0.0 / 0.0;
  
  //DEBUG---------------------------------
@@ -473,10 +473,10 @@ index fe91b31..e2d2761 100644
    //#define DEBUG_COUNTER
    //#define DISABLE_NIGHTVISION
    //#define DISABLE_BLINDNESS_DARKNESS
-diff --git a/iterationRP Alpha 0.8.15/shaders/Lib/UniformDeclare.glsl b/iterationRP Alpha 0.8.15-modified/shaders/Lib/UniformDeclare.glsl
+diff -rua --strip-trailing-cr '--exclude=.git' iterationRP Alpha 0.8.15/shaders/Lib/UniformDeclare.glsl iterationRP Alpha 0.8.15-modified/shaders/Lib/UniformDeclare.glsl
 index 6a97d6e..4b9f226 100644
---- a/iterationRP Alpha 0.8.15/shaders/Lib/UniformDeclare.glsl	
-+++ b/iterationRP Alpha 0.8.15-modified/shaders/Lib/UniformDeclare.glsl	
+--- iterationRP Alpha 0.8.15/shaders/Lib/UniformDeclare.glsl	
++++ iterationRP Alpha 0.8.15-modified/shaders/Lib/UniformDeclare.glsl	
 @@ -7,10 +7,15 @@ uniform int heldBlockLightValue;
  uniform int heldItemId2;
  uniform int heldBlockLightValue2;
@@ -520,10 +520,10 @@ index 6a97d6e..4b9f226 100644
  uniform vec2 taaJitter;
  uniform vec2 taaJitterToPrevious;
  uniform vec2 previousTaaJitter;
-diff --git a/iterationRP Alpha 0.8.15/shaders/shaders.properties b/iterationRP Alpha 0.8.15-modified/shaders/shaders.properties
+diff -rua --strip-trailing-cr '--exclude=.git' iterationRP Alpha 0.8.15/shaders/shaders.properties iterationRP Alpha 0.8.15-modified/shaders/shaders.properties
 index 60df0a9..3fd859a 100644
---- a/iterationRP Alpha 0.8.15/shaders/shaders.properties	
-+++ b/iterationRP Alpha 0.8.15-modified/shaders/shaders.properties	
+--- iterationRP Alpha 0.8.15/shaders/shaders.properties	
++++ iterationRP Alpha 0.8.15-modified/shaders/shaders.properties	
 @@ -1168,7 +1168,7 @@ screen.SCREENSHOT = INFO_RES <empty> RENDERING_MODE [ANIMATION] DISABLE_SKY_REND
  
  screen.DEBUG =  DEBUG_COUNTER              PT_TRACING_EYE \
