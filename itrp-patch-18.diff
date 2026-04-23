@@ -1,8 +1,7 @@
-diff --git a/0.8.18-orig/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl b/0.8.18-patched/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl
-index df803a1..44527ac 100644
---- a/0.8.18-orig/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl
-+++ b/0.8.18-patched/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl
-@@ -61,14 +61,66 @@ vec3 RenderSunDisc(vec3 worldDir, vec3 sunDir){
+diff -rua --strip-trailing-cr '--exclude=.git' 0.8.18-orig/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl 0.8.18-patched/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl
+--- 0.8.18-orig/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl	2026-04-21 15:40:50.784479900 -0700
++++ 0.8.18-patched/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl	2026-04-21 16:57:21.619707400 -0700
+@@ -61,14 +61,66 @@
  	return disc;
  }
  
@@ -75,7 +74,7 @@ index df803a1..44527ac 100644
  
  
  //////////Intersections///////////////////////////
-@@ -311,7 +363,7 @@ vec3 GetSunIrradiance(
+@@ -311,7 +363,7 @@
  		float sun_mu_s = dot(point, sun_direction) / r;
  		float moon_mu_s = dot(point, moon_direction) / r;
  
@@ -84,7 +83,7 @@ index df803a1..44527ac 100644
  		return (GetTransmittanceToSun(r, sun_mu_s) * (atmosphereModel_solar_irradiance * SUNLIGHT_INTENSITY)) * LMS;
  }
  
-@@ -328,9 +380,9 @@ vec3 GetSunAndSkyIrradiance(
+@@ -328,9 +380,9 @@
  		float moon_mu_s = dot(point, moon_direction) / r;
  
  		sun_sky_irradiance = GetIrradiance(r, sun_mu_s) * LMS;
@@ -96,7 +95,7 @@ index df803a1..44527ac 100644
  		return (GetTransmittanceToSun(r, sun_mu_s) * (atmosphereModel_solar_irradiance * SUNLIGHT_INTENSITY)) * LMS;
  
  }
-@@ -413,7 +465,7 @@ vec3 GetSkyRadiance(
+@@ -413,7 +465,7 @@
  			float moon_mu_s = dot(planet_surface, moon_direction) / r;
  
  			vec3 sky_irradiance = GetIrradiance(r, sun_mu_s);
@@ -105,7 +104,7 @@ index df803a1..44527ac 100644
  			vec3 sun_irradiance = atmosphereModel_solar_irradiance * GetTransmittanceToSun(r, sun_mu_s);
  
  			float d = distance(camera, planet_surface);
-@@ -425,10 +477,10 @@ vec3 GetSkyRadiance(
+@@ -425,10 +477,10 @@
  
  
  		vec3 rayleigh = sun_scattering * RayleighPhaseFunction(sun_nu)
@@ -118,7 +117,7 @@ index df803a1..44527ac 100644
  
  		rayleigh = mix(rayleigh,  vec3(Luminance(rayleigh)) * atmosphereModel_solar_irradiance, wetness * 0.5);
  
-@@ -493,10 +545,10 @@ vec3 GetSkyRadianceToPoint(
+@@ -493,10 +545,10 @@
  		moon_single_mie_scattering = moon_single_mie_scattering * smoothstep(0.0, 0.01, moon_mu_s);
  
  		vec3 rayleigh = sun_scattering * RayleighPhaseFunction(sun_nu)
@@ -131,11 +130,30 @@ index df803a1..44527ac 100644
  
  		rayleigh = mix(rayleigh, vec3(Luminance(rayleigh)) * atmosphereModel_solar_irradiance, wetness * 0.5);
  
-diff --git a/0.8.18-orig/shaders/Lib/IndividualFunctions/DOF.glsl b/0.8.18-patched/shaders/Lib/IndividualFunctions/DOF.glsl
-index a59817a..a7a62a5 100644
---- a/0.8.18-orig/shaders/Lib/IndividualFunctions/DOF.glsl
-+++ b/0.8.18-patched/shaders/Lib/IndividualFunctions/DOF.glsl
-@@ -6,9 +6,9 @@ float CalculateCoCRadius(float f, float d, float a){
+diff -rua --strip-trailing-cr '--exclude=.git' 0.8.18-orig/shaders/Lib/BasicFunctions/Sunlight_Shadow.glsl 0.8.18-patched/shaders/Lib/BasicFunctions/Sunlight_Shadow.glsl
+--- 0.8.18-orig/shaders/Lib/BasicFunctions/Sunlight_Shadow.glsl	2026-04-21 15:40:50.801515900 -0700
++++ 0.8.18-patched/shaders/Lib/BasicFunctions/Sunlight_Shadow.glsl	2026-04-22 23:29:55.179301100 -0700
+@@ -155,7 +155,7 @@
+ 
+ 			spread = max3(
+ 				avgDiff * 1e-3 * spread,
+-				(0.1 * maskPlant) * shadowProjection[0][0],
++				(0.1 * LEAVES_SSS_MULT * maskPlant) * shadowProjection[0][0],
+ 				(SHADOW_BASIC_BLUR * 2e-6) / (warpPixelSizeMinMax.x + 2e-3)
+ 			);
+ 
+@@ -235,7 +235,6 @@
+ 			result = mix(result, caustics.rgb, caustics.a * rSteps);
+ 		}
+ 	}
+-	
+ 	return result;
+ }
+ 
+diff -rua --strip-trailing-cr '--exclude=.git' 0.8.18-orig/shaders/Lib/IndividualFunctions/DOF.glsl 0.8.18-patched/shaders/Lib/IndividualFunctions/DOF.glsl
+--- 0.8.18-orig/shaders/Lib/IndividualFunctions/DOF.glsl	2026-04-21 15:40:51.071850700 -0700
++++ 0.8.18-patched/shaders/Lib/IndividualFunctions/DOF.glsl	2026-04-21 15:38:42.000000000 -0700
+@@ -6,9 +6,9 @@
  
  float GetLinearDepth(vec2 coord){
  	#if defined SUPER_RESOLUTION || defined CUSTOM_RENDER_RESOLUTION
@@ -147,11 +165,10 @@ index a59817a..a7a62a5 100644
  	#endif
  
  	#ifdef LOD_RENDERING
-diff --git a/0.8.18-orig/shaders/Lib/IndividualFunctions/NUBIS.glsl b/0.8.18-patched/shaders/Lib/IndividualFunctions/NUBIS.glsl
-index f64dbdb..0c1ec0b 100644
---- a/0.8.18-orig/shaders/Lib/IndividualFunctions/NUBIS.glsl
-+++ b/0.8.18-patched/shaders/Lib/IndividualFunctions/NUBIS.glsl
-@@ -16,10 +16,9 @@ vec2 SampleDensity(vec4 cloudPos, vec3 windDirection, bool sampleDetail){
+diff -rua --strip-trailing-cr '--exclude=.git' 0.8.18-orig/shaders/Lib/IndividualFunctions/NUBIS.glsl 0.8.18-patched/shaders/Lib/IndividualFunctions/NUBIS.glsl
+--- 0.8.18-orig/shaders/Lib/IndividualFunctions/NUBIS.glsl	2026-04-21 15:40:51.126795900 -0700
++++ 0.8.18-patched/shaders/Lib/IndividualFunctions/NUBIS.glsl	2026-04-22 17:28:25.041488700 -0700
+@@ -16,10 +16,9 @@
  	//Coverage
  		float coverageNoise = textureLod(CloudNoise3D, cloudPos.xyz * vec3(8.5e-5, 1e-5, 8.5e-5) + windDirection + CLOUD_COVERAGE_NOISE_OFFSET, 0.0).x;
  
@@ -164,7 +181,7 @@ index f64dbdb..0c1ec0b 100644
  
  	//Density Control
  		baseDensity *= curve(saturate(cloudPos.w * 1.8 - 0.8)) * 2.0 + 1.0;
-@@ -196,16 +195,31 @@ void NubisCumulus(inout vec3 color, vec3 worldDir, vec2 cloudAltitude, vec3 colo
+@@ -196,16 +195,31 @@
  }
  
  
@@ -202,11 +219,10 @@ index f64dbdb..0c1ec0b 100644
 +	return mix(1 - FINAL_CLOUD_COVERAGE, exp2(-smoothstep(0,1,cloudDensity) * 20.0), cloudShadowDamping);
  }
 \ No newline at end of file
-diff --git a/0.8.18-orig/shaders/Lib/IndividualFunctions/PlanarClouds.glsl b/0.8.18-patched/shaders/Lib/IndividualFunctions/PlanarClouds.glsl
-index 1682856..1217fda 100644
---- a/0.8.18-orig/shaders/Lib/IndividualFunctions/PlanarClouds.glsl
-+++ b/0.8.18-patched/shaders/Lib/IndividualFunctions/PlanarClouds.glsl
-@@ -110,10 +110,10 @@ void PlanarClouds(inout vec3 color, vec3 worldDir, vec3 colorSun, vec3 colorSky,
+diff -rua --strip-trailing-cr '--exclude=.git' 0.8.18-orig/shaders/Lib/IndividualFunctions/PlanarClouds.glsl 0.8.18-patched/shaders/Lib/IndividualFunctions/PlanarClouds.glsl
+--- 0.8.18-orig/shaders/Lib/IndividualFunctions/PlanarClouds.glsl	2026-04-21 15:40:51.161999200 -0700
++++ 0.8.18-patched/shaders/Lib/IndividualFunctions/PlanarClouds.glsl	2026-04-21 15:38:42.000000000 -0700
+@@ -110,10 +110,10 @@
  	float intersection = RaySphereIntersection(rayStartPos, worldDir, planetRadius + PC_ALTITUDE).y;
  
  	if (intersection > 0.0){
@@ -219,10 +235,9 @@ index 1682856..1217fda 100644
  
  		float VdotL = dot(worldDir, worldShadowVector) * 0.5 + 0.5;
  
-diff --git a/0.8.18-orig/shaders/Lib/IndividualFunctions/VolumetricFog.glsl b/0.8.18-patched/shaders/Lib/IndividualFunctions/VolumetricFog.glsl
-index c96a042..af5ead0 100644
---- a/0.8.18-orig/shaders/Lib/IndividualFunctions/VolumetricFog.glsl
-+++ b/0.8.18-patched/shaders/Lib/IndividualFunctions/VolumetricFog.glsl
+diff -rua --strip-trailing-cr '--exclude=.git' 0.8.18-orig/shaders/Lib/IndividualFunctions/VolumetricFog.glsl 0.8.18-patched/shaders/Lib/IndividualFunctions/VolumetricFog.glsl
+--- 0.8.18-orig/shaders/Lib/IndividualFunctions/VolumetricFog.glsl	2026-04-21 15:40:51.215078700 -0700
++++ 0.8.18-patched/shaders/Lib/IndividualFunctions/VolumetricFog.glsl	2026-04-21 15:38:42.000000000 -0700
 @@ -1,4 +1,6 @@
 -
 +#ifdef CLOUD_SHADOW
@@ -231,7 +246,7 @@ index c96a042..af5ead0 100644
  
  #if VFOG_NOISE_TYPE == 0
  
-@@ -31,10 +33,13 @@ float Get3DNoise(vec3 pos){
+@@ -31,10 +33,13 @@
  
  float FogDensity(vec3 fogPos, float baseDensity, float fogTimeFactor, vec3 wind){
  	const float maxHeight = max(VFOG_HEIGHT, VFOG_HEIGHT_2);
@@ -248,7 +263,7 @@ index c96a042..af5ead0 100644
   
  	
  	fogPos = fogPos * vec3(0.2, 0.05, 0.2) + wind;
-@@ -60,7 +65,7 @@ float FogDensity(vec3 fogPos, float baseDensity, float fogTimeFactor, vec3 wind)
+@@ -60,7 +65,7 @@
  	//density  = density * density;
  	density *= density * falloff;
  
@@ -257,7 +272,7 @@ index c96a042..af5ead0 100644
  
  	return density;
  }
-@@ -68,9 +73,9 @@ float FogDensity(vec3 fogPos, float baseDensity, float fogTimeFactor, vec3 wind)
+@@ -68,9 +73,9 @@
  #endif
  
  void VolumetricFog(inout vec3 color, vec3 startPos, vec3 endPos, vec3 worldDir, float globalCloudShadow, float fogTimeFactor){
@@ -269,7 +284,7 @@ index c96a042..af5ead0 100644
  
  	#if defined TAA || defined SUPER_RESOLUTION
  		float noise = BlueNoiseTemporal().y;
-@@ -112,7 +117,7 @@ void VolumetricFog(inout vec3 color, vec3 startPos, vec3 endPos, vec3 worldDir,
+@@ -112,7 +117,7 @@
  	float phases = HenyeyGreenstein(VdotL, 0.65) * 0.7 + 0.035;
  
  	#if VFOG_NOISE_TYPE > 0
@@ -278,7 +293,7 @@ index c96a042..af5ead0 100644
  		vec3 wind = (vec3(0.6, -0.05, -1.0) * 0.1) * windTimer;
  	#endif
  
-@@ -179,25 +184,24 @@ void VolumetricFog(inout vec3 color, vec3 startPos, vec3 endPos, vec3 worldDir,
+@@ -179,25 +184,24 @@
  			#endif
  		}
  
@@ -311,11 +326,10 @@ index c96a042..af5ead0 100644
  
  		rayDensity += stepRayDensity * shadow;
  
-diff --git a/0.8.18-orig/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl b/0.8.18-patched/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl
-index 43734ed..e1b6748 100644
---- a/0.8.18-orig/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl
-+++ b/0.8.18-patched/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl
-@@ -52,6 +52,82 @@ uniform sampler3D voxelData3D;
+diff -rua --strip-trailing-cr '--exclude=.git' 0.8.18-orig/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl 0.8.18-patched/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl
+--- 0.8.18-orig/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl	2026-04-21 15:40:51.934589700 -0700
++++ 0.8.18-patched/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl	2026-04-22 17:28:01.599113100 -0700
+@@ -52,6 +52,82 @@
  	#include "/Lib/IndividualFunctions/EndSkyTimer.glsl"
  #endif
  
@@ -398,7 +412,7 @@ index 43734ed..e1b6748 100644
  
  vec3 SkyLighting(vec3 raydir, float pdf, float lightmap){
  	//float SdotN = dot(worldNormal, normalize(worldSunVector + vec3(0.0, 1.0, 0.0)));
-@@ -258,15 +334,8 @@ vec3 DiffuseTracing(vec3 viewPosRaw, float depth, vec3 vertexNormal, vec3 worldN
+@@ -258,15 +334,8 @@
  
  	#endif
  
@@ -414,7 +428,7 @@ index 43734ed..e1b6748 100644
  
  			#if defined DIMENSION_OVERWORLD || defined DIMENSION_END
  				diffuse = SkyLighting(rayDir, pdf, lightmap.y);
-@@ -524,6 +593,10 @@ vec3 DiffuseTracing(vec3 viewPosRaw, float depth, vec3 vertexNormal, vec3 worldN
+@@ -524,6 +593,10 @@
  					if (sunLighting > 0.0){
  						vec3 hitWorldPos = hitVoxelPos - cameraPositionFract - (voxelResolution * 0.5);
  						vec3 sunColor = sunLight * SimpleShadow(hitWorldPos, hitNormal) * sunLighting;
@@ -425,11 +439,10 @@ index 43734ed..e1b6748 100644
  						diffuse += sunColor * hitSurface;
  					}
  				#endif
-diff --git a/0.8.18-orig/shaders/Lib/Programs/Composite/PixelData_VS.glsl b/0.8.18-patched/shaders/Lib/Programs/Composite/PixelData_VS.glsl
-index c1a929b..4e6d0ab 100644
---- a/0.8.18-orig/shaders/Lib/Programs/Composite/PixelData_VS.glsl
-+++ b/0.8.18-patched/shaders/Lib/Programs/Composite/PixelData_VS.glsl
-@@ -46,11 +46,11 @@ void main(){
+diff -rua --strip-trailing-cr '--exclude=.git' 0.8.18-orig/shaders/Lib/Programs/Composite/PixelData_VS.glsl 0.8.18-patched/shaders/Lib/Programs/Composite/PixelData_VS.glsl
+--- 0.8.18-orig/shaders/Lib/Programs/Composite/PixelData_VS.glsl	2026-04-21 15:40:52.078441400 -0700
++++ 0.8.18-patched/shaders/Lib/Programs/Composite/PixelData_VS.glsl	2026-04-21 15:38:42.000000000 -0700
+@@ -46,11 +46,11 @@
  				if (heldItemId != 11000.0 && centerMaterialID == MATID_HAND){
  					centerDepth = texelFetch(depthtex2, centerTexelCoord, 0).x;
  				}else{
@@ -443,11 +456,10 @@ index c1a929b..4e6d0ab 100644
  
  			#endif
  
-diff --git a/0.8.18-orig/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl b/0.8.18-patched/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl
-index 0c09673..143092c 100644
---- a/0.8.18-orig/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl
-+++ b/0.8.18-patched/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl
-@@ -33,11 +33,11 @@ in vec2 fogTime;
+diff -rua --strip-trailing-cr '--exclude=.git' 0.8.18-orig/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl 0.8.18-patched/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl
+--- 0.8.18-orig/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl	2026-04-21 15:40:52.189867900 -0700
++++ 0.8.18-patched/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl	2026-04-21 15:38:42.000000000 -0700
+@@ -33,11 +33,11 @@
  
  vec3 HashStars(vec3 worldDir){
  	#if FSR2_SCALE >= 0
@@ -463,7 +475,7 @@ index 0c09673..143092c 100644
  	#endif
  	const float maxLuminance = 0.05 * HASHSTARS_BRIGHTNESS;
  	const float minTemperature = 4000.0;
-@@ -57,7 +57,7 @@ vec3 HashStars(vec3 worldDir){
+@@ -57,7 +57,7 @@
  	hash.y = 2.0 * hash.y - 4.0 * hash.y * hash.y + 3.0 * hash.y * hash.y * hash.y;
  
  	float c = remapSaturate(hash.x, 1.0 - coverage, 1.0);
@@ -472,7 +484,7 @@ index 0c09673..143092c 100644
  }
  
  ////////////////////////////// Main //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-@@ -90,9 +90,9 @@ void main(){
+@@ -90,9 +90,9 @@
  	vec2 cloudAltitude = vec2(mix(CLOUD_CLEAR_ALTITUDE, CLOUD_RAIN_ALTITUDE, wetness));
  	cloudAltitude.y += mix(CLOUD_CLEAR_THICKNESS, CLOUD_RAIN_THICKNESS, wetness);
  
@@ -484,11 +496,10 @@ index 0c09673..143092c 100644
  
  
  //////////////////// Sky ///////////////////////////////////////////////////////////////////////////
-diff --git a/0.8.18-orig/shaders/Lib/Programs/Composite/Soild_FS.glsl b/0.8.18-patched/shaders/Lib/Programs/Composite/Soild_FS.glsl
-index a4e543a..78fca69 100644
---- a/0.8.18-orig/shaders/Lib/Programs/Composite/Soild_FS.glsl
-+++ b/0.8.18-patched/shaders/Lib/Programs/Composite/Soild_FS.glsl
-@@ -179,9 +179,14 @@ vec2 texCoord = gl_FragCoord.xy * UNIFORM_PIXEL_SIZE;
+diff -rua --strip-trailing-cr '--exclude=.git' 0.8.18-orig/shaders/Lib/Programs/Composite/Soild_FS.glsl 0.8.18-patched/shaders/Lib/Programs/Composite/Soild_FS.glsl
+--- 0.8.18-orig/shaders/Lib/Programs/Composite/Soild_FS.glsl	2026-04-21 15:40:52.206377500 -0700
++++ 0.8.18-patched/shaders/Lib/Programs/Composite/Soild_FS.glsl	2026-04-22 23:30:08.874519600 -0700
+@@ -179,9 +179,14 @@
  	in vec3 shadowVector;
  
  	in vec3 colorShadowlight;
@@ -503,7 +514,7 @@ index a4e543a..78fca69 100644
  #include "/Lib/GbufferData.glsl"
  #include "/Lib/Uniform/GbufferTransforms.glsl"
  
-@@ -552,18 +557,15 @@ void main(){
+@@ -552,18 +557,15 @@
  			float shadowmapRange = saturate(3.2 - opaqueDist / min(shadowDistance, far) * 4.0);
  		#endif
  
@@ -524,11 +535,10 @@ index a4e543a..78fca69 100644
  
  		gbuffer.material.scattering *= saturate(1.0 - materialMask.leaves - materialMask.grass);
  		gbuffer.worldNormal = normalize(mix(gbuffer.worldNormal, vec3(0.0, 1.0, 0.0), materialMask.grass * 0.49));
-diff --git a/0.8.18-orig/shaders/Lib/Programs/Final_FS.glsl b/0.8.18-patched/shaders/Lib/Programs/Final_FS.glsl
-index eb28541..289f3fa 100644
---- a/0.8.18-orig/shaders/Lib/Programs/Final_FS.glsl
-+++ b/0.8.18-patched/shaders/Lib/Programs/Final_FS.glsl
-@@ -1155,8 +1155,18 @@ if (angle <= 1.0){
+diff -rua --strip-trailing-cr '--exclude=.git' 0.8.18-orig/shaders/Lib/Programs/Final_FS.glsl 0.8.18-patched/shaders/Lib/Programs/Final_FS.glsl
+--- 0.8.18-orig/shaders/Lib/Programs/Final_FS.glsl	2026-04-21 15:40:51.617709800 -0700
++++ 0.8.18-patched/shaders/Lib/Programs/Final_FS.glsl	2026-04-21 15:38:42.000000000 -0700
+@@ -1155,8 +1155,18 @@
  }
  
  //*/
@@ -549,11 +559,10 @@ index eb28541..289f3fa 100644
  	gl_FragData[0] = vec4(color, 0.0);
  
  
-diff --git a/0.8.18-orig/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl b/0.8.18-patched/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl
-index eeb2ab2..bcabf1e 100644
---- a/0.8.18-orig/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl
-+++ b/0.8.18-patched/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl
-@@ -30,8 +30,9 @@ void voxy_emitFragment(VoxyFragmentParameters parameters){
+diff -rua --strip-trailing-cr '--exclude=.git' 0.8.18-orig/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl 0.8.18-patched/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl
+--- 0.8.18-orig/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl	2026-04-21 15:40:53.075246900 -0700
++++ 0.8.18-patched/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl	2026-04-21 15:38:42.000000000 -0700
+@@ -30,8 +30,9 @@
  //albedo
  	vec4 albedo = parameters.sampledColour * parameters.tinting;
  
@@ -564,7 +573,7 @@ index eeb2ab2..bcabf1e 100644
  
  //TBN
  	vec3 N = vec3(
-@@ -47,7 +48,6 @@ void voxy_emitFragment(VoxyFragmentParameters parameters){
+@@ -47,7 +48,6 @@
  
  //material
  	float materialIDs = MATID_STAINEDGLASS;
@@ -572,11 +581,10 @@ index eeb2ab2..bcabf1e 100644
  
  //normal
  	vec3 waterNormal = tbn[2];
-diff --git a/0.8.18-orig/shaders/Lib/Settings.glsl b/0.8.18-patched/shaders/Lib/Settings.glsl
-index 39eddc2..bdf28c6 100644
---- a/0.8.18-orig/shaders/Lib/Settings.glsl
-+++ b/0.8.18-patched/shaders/Lib/Settings.glsl
-@@ -520,7 +520,7 @@ const float monocleFix = 0.0 / 0.0;
+diff -rua --strip-trailing-cr '--exclude=.git' 0.8.18-orig/shaders/Lib/Settings.glsl 0.8.18-patched/shaders/Lib/Settings.glsl
+--- 0.8.18-orig/shaders/Lib/Settings.glsl	2026-04-21 15:40:50.647911800 -0700
++++ 0.8.18-patched/shaders/Lib/Settings.glsl	2026-04-22 23:48:26.664639800 -0700
+@@ -520,7 +520,7 @@
  
  //Volumetric Fog------------------------
  	#define VFOG
@@ -585,7 +593,7 @@ index 39eddc2..bdf28c6 100644
  
  	#define VFOG_NOISE_OCTAVE 			1  // [1 2 3 4 5 6]
  	#define VFOG_NOISE_HORIZONTAL_SCALE 1.0 // [0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0 2.5 3.0 5.0]
-@@ -753,6 +753,7 @@ const float monocleFix = 0.0 / 0.0;
+@@ -753,6 +753,7 @@
  
  //DEBUG---------------------------------
  	#define WHITE_DEBUG_WORLD 0 // [0 1 2 3 4 5 6 7 8 9 10]
@@ -593,7 +601,7 @@ index 39eddc2..bdf28c6 100644
    //#define DEBUG_COUNTER
    //#define DISABLE_NIGHTVISION
    //#define DISABLE_BLINDNESS_DARKNESS
-@@ -762,4 +763,10 @@ const float monocleFix = 0.0 / 0.0;
+@@ -762,4 +763,11 @@
    //#define DEBUG_IRC
    //#define DISABLE_REFLECTION_TEMPORAL_MOTIONWEIGHT
  
@@ -606,12 +614,12 @@ index 39eddc2..bdf28c6 100644
 +	#define MOON_PHASES
 +	#define MOON_PHASE_LIGHTING
 +	#define NEW_MOON_BRIGHTNESS 0.005 // [0.001 0.002 0.005 0.01 0.02]
++	#define LEAVES_SSS_MULT 2.5 // [1.0 1.5 2.0 2.5 3.0 4.0 5.0]
 \ No newline at end of file
-diff --git a/0.8.18-orig/shaders/Lib/UniformDeclare.glsl b/0.8.18-patched/shaders/Lib/UniformDeclare.glsl
-index 8a85fbd..26c1d4b 100644
---- a/0.8.18-orig/shaders/Lib/UniformDeclare.glsl
-+++ b/0.8.18-patched/shaders/Lib/UniformDeclare.glsl
-@@ -8,10 +8,22 @@ uniform int heldBlockLightValue;
+diff -rua --strip-trailing-cr '--exclude=.git' 0.8.18-orig/shaders/Lib/UniformDeclare.glsl 0.8.18-patched/shaders/Lib/UniformDeclare.glsl
+--- 0.8.18-orig/shaders/Lib/UniformDeclare.glsl	2026-04-21 15:40:50.683395600 -0700
++++ 0.8.18-patched/shaders/Lib/UniformDeclare.glsl	2026-04-21 16:56:36.149253100 -0700
+@@ -8,10 +8,22 @@
  uniform int heldItemId2;
  uniform int heldBlockLightValue2;
  uniform int worldTime;
@@ -634,7 +642,7 @@ index 8a85fbd..26c1d4b 100644
  uniform float aspectRatio;
  uniform float viewWidth;
  uniform float viewHeight;
-@@ -33,6 +45,31 @@ uniform int hideGUI;
+@@ -33,6 +45,31 @@
  uniform float darknessFactor;
  uniform float darknessLightFactor;
  
@@ -666,11 +674,10 @@ index 8a85fbd..26c1d4b 100644
  uniform vec2 taaJitter;
  uniform vec2 taaJitterToPrevious;
  uniform vec2 previousTaaJitter;
-diff --git a/0.8.18-orig/shaders/shaders.properties b/0.8.18-patched/shaders/shaders.properties
-index 4b42503..01d47b9 100644
---- a/0.8.18-orig/shaders/shaders.properties
-+++ b/0.8.18-patched/shaders/shaders.properties
-@@ -828,7 +828,7 @@ screen.MOD_SUPPORT.columns=1
+diff -rua --strip-trailing-cr '--exclude=.git' 0.8.18-orig/shaders/shaders.properties 0.8.18-patched/shaders/shaders.properties
+--- 0.8.18-orig/shaders/shaders.properties	2026-04-21 15:40:50.433265900 -0700
++++ 0.8.18-patched/shaders/shaders.properties	2026-04-22 23:30:36.502926000 -0700
+@@ -828,7 +828,7 @@
  screen.SCREENSHOT.columns=1
  	screen.ANIMATION.columns=2
  screen.DEBUG.columns=2
@@ -679,7 +686,7 @@ index 4b42503..01d47b9 100644
  
  
  
-@@ -853,7 +853,7 @@ screen= iterationRP_INFO    iterationRP_VERSION \
+@@ -853,7 +853,7 @@
  		[SCREENSHOT]        <empty> \
  		<empty>             <empty> \
  		<empty>             <empty> \
@@ -688,7 +695,7 @@ index 4b42503..01d47b9 100644
  
  screen.PT_VOXEL=PT_VOXEL_RESOLUTION <empty> PT_MIDBLOCK_TEMPFIX PT_FULLBLOCK_VERIFICATION <empty> PT_TAG_DETECTION PT_FULLBLOCK_DETECTION PT_FULLBLOCK_DETECTION_ALPHA_TRACING <empty> VANILLA_EMISSIVE
  
-@@ -1187,7 +1187,7 @@ screen.SCREENSHOT = INFO_RES <empty> RENDERING_MODE [ANIMATION] DISABLE_SKY_REND
+@@ -1187,7 +1187,7 @@
  
  screen.DEBUG =  DEBUG_COUNTER              PT_TRACING_EYE \
  				WHITE_DEBUG_WORLD          DEBUG_IRC \
@@ -697,19 +704,20 @@ index 4b42503..01d47b9 100644
  				FTC_OFFSET                 <empty> \
  				CLOUD_SPEED                DEBUG_RTW \
  				<empty>                    <empty> \
-@@ -1196,6 +1196,8 @@ screen.DEBUG =  DEBUG_COUNTER              PT_TRACING_EYE \
+@@ -1196,6 +1196,9 @@
  				DISABLE_REFLECTION_TEMPORAL_MOTIONWEIGHT
  
  
 +screen.PATCHES =  DYNAMIC_WEATHER     MOON_PHASES \
-+								MOON_PHASE_LIGHTING   NEW_MOON_BRIGHTNESS
++								MOON_PHASE_LIGHTING   NEW_MOON_BRIGHTNESS \
++								LEAVES_SSS_MULT
  
  
  
-@@ -1241,4 +1243,5 @@ sliders=PT_VOXEL_RESOLUTION \
+@@ -1241,4 +1244,5 @@
  		DH_TEXTURE_NOISE_STEPS DH_TEXTURE_NOISE_STRENGTH \
  		TACZ_ADAPTIVE_EMISSIVE_BRIGHTNESS TACZ_MUZZLE_FLASH_BRIGHTNESS \
  		RENDERING_MODE_SPP RENDERING_MODE_COOLDOWN \
 -		WHITE_DEBUG_WORLD FTC_OFFSET
 +		WHITE_DEBUG_WORLD FTC_OFFSET \
-+		NEW_MOON_BRIGHTNESS
++		NEW_MOON_BRIGHTNESS LEAVES_SSS_MULT

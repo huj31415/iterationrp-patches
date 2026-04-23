@@ -31,7 +31,7 @@ def create_zip(directory, zip_path):
 
 def apply_patch(directory, patch_file):
     result = subprocess.run(
-        ["patch", "-p2", "-i", str(patch_file)],
+        ["patch", "-p1", "-i", str(patch_file)],
         cwd=directory,
         capture_output=True,
         text=True
