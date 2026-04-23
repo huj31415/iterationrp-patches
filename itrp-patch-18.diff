@@ -148,7 +148,7 @@ index a59817a..a7a62a5 100644
  
  	#ifdef LOD_RENDERING
 diff --git a/0.8.18-orig/shaders/Lib/IndividualFunctions/NUBIS.glsl b/0.8.18-patched/shaders/Lib/IndividualFunctions/NUBIS.glsl
-index f64dbdb..af7acbc 100644
+index f64dbdb..0c1ec0b 100644
 --- a/0.8.18-orig/shaders/Lib/IndividualFunctions/NUBIS.glsl
 +++ b/0.8.18-patched/shaders/Lib/IndividualFunctions/NUBIS.glsl
 @@ -16,10 +16,9 @@ vec2 SampleDensity(vec4 cloudPos, vec3 windDirection, bool sampleDetail){
@@ -194,7 +194,7 @@ index f64dbdb..af7acbc 100644
  	cloudDensity = max(cloudDensity, SampleDensity(checkPos, windDirection, false).y);
  
 -	return exp2(-cloudDensity * 20.0);
-+	float cloudShadowDamping = smoothstep(0, 0.05, .25 - abs(shadowAngle - 0.25));
++	float cloudShadowDamping = smoothstep(0, 0.02, .25 - abs(shadowAngle - 0.25));
 +
 +	// return mix(1.0, exp2(-cloudDensity * 20.0), cloudShadowDamping);
 +	// return exp2(-cloudDensity * 20.0);
@@ -312,10 +312,93 @@ index c96a042..af5ead0 100644
  		rayDensity += stepRayDensity * shadow;
  
 diff --git a/0.8.18-orig/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl b/0.8.18-patched/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl
-index 43734ed..01ed437 100644
+index 43734ed..e1b6748 100644
 --- a/0.8.18-orig/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl
 +++ b/0.8.18-patched/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl
-@@ -258,15 +258,8 @@ vec3 DiffuseTracing(vec3 viewPosRaw, float depth, vec3 vertexNormal, vec3 worldN
+@@ -52,6 +52,82 @@ uniform sampler3D voxelData3D;
+ 	#include "/Lib/IndividualFunctions/EndSkyTimer.glsl"
+ #endif
+ 
++#ifdef CLOUD_SHADOW
++vec2 SampleDensity(vec4 cloudPos, vec3 windDirection, bool sampleDetail){
++	//Base Noise
++		vec4 baseNoise = textureLod(CloudNoise3D, cloudPos.xyz * CLOUD_BASE_NOISE_SCALE + windDirection * 10.0, 0.0);
++
++		float baseDensity = baseNoise.y * 0.4 + baseNoise.z * 0.4 + baseNoise.w * 0.2;
++		baseDensity = remapSaturate(baseNoise.x, baseDensity - 1.0, 1.0);
++
++		float shapeCurve = curveTop(saturate(1.0 - cloudPos.w)) * 0.5;
++		shapeCurve += curve(saturate(1.15 - cloudPos.w * 1.43)) * 0.5;
++		baseDensity *= shapeCurve;
++		baseDensity *= fsqrt(saturate(cloudPos.w * 2.5)) * 0.2 + 0.8;
++		baseDensity *= mix(1.0, curveTop(saturate(cloudPos.w * 3.0)), wetness);
++
++	//Coverage
++		float coverageNoise = textureLod(CloudNoise3D, cloudPos.xyz * vec3(8.5e-5, 1e-5, 8.5e-5) + windDirection + CLOUD_COVERAGE_NOISE_OFFSET, 0.0).x;
++
++		float coverage = remapSaturate(1.0 - coverageNoise, FINAL_CLOUD_COVERAGE * 0.2, FINAL_CLOUD_COVERAGE);
++
++		baseDensity = (FINAL_CLOUD_COVERAGE == 0) ? 0 : remapSaturate(baseDensity, coverage, 1.0);
++
++	//Density Control
++		baseDensity *= curve(saturate(cloudPos.w * 1.8 - 0.8)) * 2.0 + 1.0;
++		baseDensity *= curveTop(saturate(cloudPos.w * 1.8));
++
++		baseDensity = saturate(baseDensity);
++
++
++	float detailedDensity = 0.0;
++
++	if(baseDensity > 1e-6 && sampleDetail){
++		//Curl Noise
++			float curlNoise = textureLod(noisetex, cloudPos.xy * 0.0001, 0.0).w;
++			cloudPos.xy += curlNoise * (100.0 - cloudPos.w * 100.0);
++
++		//Detailed Noise
++			vec3 detailedNoise = textureLod(CloudDetailedNoise3D, cloudPos.xyz * CLOUD_DETAILED_NOISE_SCALE + windDirection * 140.0, 0.0).xyz;
++			detailedDensity = 1.0 - detailedNoise.x * 0.625 - detailedNoise.y * 0.25 - detailedNoise.z * 0.125;
++			detailedDensity *= (0.21 - wetness * 0.11) * CLOUD_DETAILED_NOISE_STRENGTH;
++
++			detailedDensity = remapSaturate(baseDensity, detailedDensity, 1.0);
++	}else{
++		detailedDensity = baseDensity;
++	}
++
++	return vec2(baseDensity, detailedDensity);
++}
++
++float CloudShadowTex(vec3 worldPos){
++
++	vec2 cloudAltitude = vec2(mix(CLOUD_CLEAR_ALTITUDE, CLOUD_RAIN_ALTITUDE, wetness));
++	cloudAltitude.y += mix(CLOUD_CLEAR_THICKNESS, CLOUD_RAIN_THICKNESS, wetness);
++	float thickness = cloudAltitude.y - cloudAltitude.x;
++	if (worldPos.y + cameraPosition.y > cloudAltitude.x) return 1.0;
++	float wind = 0.0005 * (windTime * CLOUD_SPEED + 10.0 * FTC_OFFSET);
++	vec3 windDirection = vec3(1.0, -0.05, -0.4) * wind;
++	vec3 worldShadowVector = shadowModelViewInverse2;
++	vec2 coord = worldPos.xz - worldShadowVector.xz * ((worldPos.y + cameraPosition.y) / worldShadowVector.y);
++
++	vec4 checkPos = vec4(coord.x + cameraPosition.x, 0.0, coord.y + cameraPosition.z, 0.0);
++
++	checkPos += vec4(worldShadowVector * ((cloudAltitude.x + thickness * 0.25) / worldShadowVector.y) , 0.25);
++	float cloudDensity = SampleDensity(checkPos, windDirection, false).y;
++
++	checkPos += vec4(worldShadowVector * ((thickness * 0.25) / worldShadowVector.y) , 0.25);
++	cloudDensity = max(cloudDensity, SampleDensity(checkPos, windDirection, false).y);
++
++	float cloudShadowDamping = smoothstep(0, 0.02, .25 - abs(shadowAngle - 0.25));
++
++	// return mix(1.0, exp2(-cloudDensity * 20.0), cloudShadowDamping);
++	// return exp2(-cloudDensity * 20.0);
++	// return exp2(-smoothstep(0,1,cloudDensity) * 20.0);
++	return mix(1 - FINAL_CLOUD_COVERAGE, exp2(-smoothstep(0,1,cloudDensity) * 20.0), cloudShadowDamping);
++}
++#endif
++
+ 
+ vec3 SkyLighting(vec3 raydir, float pdf, float lightmap){
+ 	//float SdotN = dot(worldNormal, normalize(worldSunVector + vec3(0.0, 1.0, 0.0)));
+@@ -258,15 +334,8 @@ vec3 DiffuseTracing(vec3 viewPosRaw, float depth, vec3 vertexNormal, vec3 worldN
  
  	#endif
  
@@ -331,6 +414,17 @@ index 43734ed..01ed437 100644
  
  			#if defined DIMENSION_OVERWORLD || defined DIMENSION_END
  				diffuse = SkyLighting(rayDir, pdf, lightmap.y);
+@@ -524,6 +593,10 @@ vec3 DiffuseTracing(vec3 viewPosRaw, float depth, vec3 vertexNormal, vec3 worldN
+ 					if (sunLighting > 0.0){
+ 						vec3 hitWorldPos = hitVoxelPos - cameraPositionFract - (voxelResolution * 0.5);
+ 						vec3 sunColor = sunLight * SimpleShadow(hitWorldPos, hitNormal) * sunLighting;
++						
++						#ifdef CLOUD_SHADOW
++							sunColor *= CloudShadowTex(worldPos);
++						#endif
+ 						diffuse += sunColor * hitSurface;
+ 					}
+ 				#endif
 diff --git a/0.8.18-orig/shaders/Lib/Programs/Composite/PixelData_VS.glsl b/0.8.18-patched/shaders/Lib/Programs/Composite/PixelData_VS.glsl
 index c1a929b..4e6d0ab 100644
 --- a/0.8.18-orig/shaders/Lib/Programs/Composite/PixelData_VS.glsl
