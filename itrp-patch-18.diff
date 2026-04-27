@@ -498,7 +498,7 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.18-orig/shaders/Lib/Programs/
  //////////////////// Sky ///////////////////////////////////////////////////////////////////////////
 diff -rua --strip-trailing-cr '--exclude=.git' 0.8.18-orig/shaders/Lib/Programs/Composite/Soild_FS.glsl 0.8.18-patched/shaders/Lib/Programs/Composite/Soild_FS.glsl
 --- 0.8.18-orig/shaders/Lib/Programs/Composite/Soild_FS.glsl	2026-04-21 15:40:52.206377500 -0700
-+++ 0.8.18-patched/shaders/Lib/Programs/Composite/Soild_FS.glsl	2026-04-22 23:30:08.874519600 -0700
++++ 0.8.18-patched/shaders/Lib/Programs/Composite/Soild_FS.glsl	2026-04-25 16:58:37.142157300 -0700
 @@ -179,9 +179,14 @@
  	in vec3 shadowVector;
  
@@ -618,7 +618,7 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.18-orig/shaders/Lib/Settings.
 \ No newline at end of file
 diff -rua --strip-trailing-cr '--exclude=.git' 0.8.18-orig/shaders/Lib/UniformDeclare.glsl 0.8.18-patched/shaders/Lib/UniformDeclare.glsl
 --- 0.8.18-orig/shaders/Lib/UniformDeclare.glsl	2026-04-21 15:40:50.683395600 -0700
-+++ 0.8.18-patched/shaders/Lib/UniformDeclare.glsl	2026-04-21 16:56:36.149253100 -0700
++++ 0.8.18-patched/shaders/Lib/UniformDeclare.glsl	2026-04-26 19:03:22.214485400 -0700
 @@ -8,10 +8,22 @@
  uniform int heldItemId2;
  uniform int heldBlockLightValue2;
@@ -628,15 +628,15 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.18-orig/shaders/Lib/UniformDe
 +uniform int moonPhase;
 +
 +#ifdef MOON_PHASE_LIGHTING
-+	const float PHASED_NIGHT_BRIGHTNESS = NIGHT_BRIGHTNESS * (pow(abs(4 - moonPhase) / 4.0, 2.2) + float(moonPhase == 4) * NEW_MOON_BRIGHTNESS);
++	float PHASED_NIGHT_BRIGHTNESS = NIGHT_BRIGHTNESS * (pow(abs(4 - moonPhase) / 4.0, 2.2) + float(moonPhase == 4) * NEW_MOON_BRIGHTNESS);
 +#else
-+	const float PHASED_NIGHT_BRIGHTNESS = NIGHT_BRIGHTNESS;
++	float PHASED_NIGHT_BRIGHTNESS = NIGHT_BRIGHTNESS;
 +#endif
 +
  uniform int frameCounter;
  uniform float frameTime;
  uniform float frameTimeCounter;
-+const float windTime = (worldDay % 180 * 1200.0 + worldTime * 0.05);
++float windTime = (worldDay % 180 * 1200.0 + worldTime * 0.05);
  uniform float sunAngle;
 +uniform float shadowAngle;
  uniform float aspectRatio;
@@ -653,17 +653,17 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.18-orig/shaders/Lib/UniformDe
 +	// daily cumulus cloud coverage centered on CLOUD_CLEAR_COVERY
 +	// set max coverage to 1
 +	const float coverDeviation = (1 - CLOUD_CLEAR_COVERY);
-+	const vec2 weather = weatherHash(vec2(worldDay, worldDay + 1)) * 2.0 - 1.0;
-+	const float weatherBlend = smoothstep(0, 1, worldTime / 24000.0);
++	vec2 weather = weatherHash(vec2(worldDay, worldDay + 1)) * 2.0 - 1.0;
++	float weatherBlend = smoothstep(0, 1, worldTime / 24000.0);
 +	// blend coverage between days centered around clear coverage setting
-+	const float DAILY_COVERAGE = clamp(
++	float DAILY_COVERAGE = clamp(
 +		mix(weather.x, weather.y, weatherBlend) * coverDeviation + CLOUD_CLEAR_COVERY, 0.0, 1.0
 +	);
-+	const float FINAL_CLOUD_COVERAGE = mix(DAILY_COVERAGE, CLOUD_RAIN_COVERY, wetness);
++	float FINAL_CLOUD_COVERAGE = mix(DAILY_COVERAGE, CLOUD_RAIN_COVERY, wetness);
 +
 +	// planar clouds max coverage PC_CLEAR_COVERAGE
-+	const vec2 PC_weather = weatherHash(vec2(worldDay + 0.5, worldDay + 1.5));
-+	const float FINAL_PC_COVERAGE = clamp(
++	vec2 PC_weather = weatherHash(vec2(worldDay + 0.5, worldDay + 1.5));
++	float FINAL_PC_COVERAGE = clamp(
 +		mix(PC_weather.x, PC_weather.y, weatherBlend) * PC_CLEAR_COVERAGE, 0.1, 1.0
 +	);
 +#else
