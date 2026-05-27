@@ -14,12 +14,6 @@
 
 6. Move the patched shader output to your shaderpacks folder and enjoy!
 
-
-## Generating a diff
-Now uses gnu diff
-
-```diff -rua --strip-trailing-cr "original-unzipped-folder" "patched-unzipped-folder" > patch.diff```
-
 ### Technical details of the convolution bloom implementation
 
 * Uses radix-4 packed RGBA Cooley-Tukey FFT for size 1024 with radix-2 prepass for non-power-of-4 (2048)
@@ -32,6 +26,11 @@ Now uses gnu diff
   3. Unpack channels, complex multiply with kernel spectrum, repack channels, and do row IFFT
   4. Column IFFT
 * In my testing the performance impact was &le;5% with Nsight profiler overhead
+
+## Generating a diff
+Now uses gnu diff
+
+```diff -rua --strip-trailing-cr "original-unzipped-folder" "patched-unzipped-folder" > patch.diff```
 
 ## Changelog
 ### v2026.5.26 Convolution bloom release
