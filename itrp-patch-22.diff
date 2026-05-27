@@ -1,6 +1,162 @@
-diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl 0.8.22-patched/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/BasicFunctions/FFT.glsl 0.8.22-patched/shaders/Lib/BasicFunctions/FFT.glsl
+--- 0.8.22-orig/shaders/Lib/BasicFunctions/FFT.glsl	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/Lib/BasicFunctions/FFT.glsl	2026-05-26 16:22:57.514629800 -0700
+@@ -0,0 +1,151 @@
++#define PI 3.1415926535
++#define TAU 6.283185307
++
++#if FFT_SIZE == 1024
++  #define N_4_1 256 // N / 4
++  #define N_4_2 512 // 2N / 4
++  #define N_4_3 768 // 3N / 4
++	#define START_Ns 4
++#elif FFT_SIZE == 2048
++  #define N_4_1 512
++  #define N_4_2 1024
++  #define N_4_3 1536
++	#define START_Ns 8
++#endif
++
++#ifdef IFFT
++  #define INV -1.0
++#else
++  #define INV 1.0
++#endif
++
++const float NORM = 1.0 / float(FFT_SIZE);
++  
++shared vec2 row[FFT_SIZE];
++
++vec2 cmul(in vec2 A, in vec2 B) {
++	return vec2(A.x * B.x - A.y * B.y, dot(A, B.yx));
++}
++
++// to prevent shared bank conflicts
++uint swizzle(uint x) {
++  return (x & ~31) | ((x & 31) ^ ((x >> 5) & 31));
++}
++
++uint digit_reverse_4(uint x) {
++  return ((x & 3) << 8) | ((x & 12) << 4) | (x & 48) | ((x & 192) >> 4) | ((x >> 8) & 3);
++}
++
++// in-place Cooley-Tukey FFT, forward if inv = 1, inverse if inv = -1
++void fftR4_CT(uint x, uint Ns) {
++  uint Ns4 = Ns >> 2u; // Ns / 4
++  uint offset = x & (Ns4 - 1u); // x % Ns4;
++
++  // replace with shared memory LUT
++  float angle = -INV * TAU * (float(offset) / float(Ns));
++  vec2 w1 = vec2(cos(angle), sin(angle));
++
++  uint base = (x / Ns4) * Ns + offset; // floor(x / Ns4) * Ns + offset;
++  uint i0 = swizzle(base);
++  uint i1 = swizzle(base + Ns4);
++  uint i2 = swizzle(base + Ns4 * 2u);
++  uint i3 = swizzle(base + Ns4 * 3u);
++
++  vec2 t0 = row[i0];
++  vec2 t1 = cmul(w1, row[i1]);
++  vec2 w2 = cmul(w1, w1);
++  vec2 t2 = cmul(w2, row[i2]);
++  vec2 t3 = cmul(cmul(w2, w1), row[i3]);
++
++  row[i0] = t0 + t1 + t2 + t3;
++  row[i1] = t0 - t2 + vec2(t1.y - t3.y, t3.x - t1.x) * INV;
++  row[i2] = t0 - t1 + t2 - t3;
++  row[i3] = t0 - t2 + vec2(t3.y - t1.y, t1.x - t3.x) * INV;
++}
++
++/* usage:
++  uint y  = gl_GlobalInvocationID.y;
++  uint x0 = gl_GlobalInvocationID.x;
++  uint x1 = x0 + N_4_1;
++  uint x2 = x1 + N_4_1;
++  uint x3 = x2 + N_4_1;
++
++  vec4 t0 = imageLoad(input, ivec2(x0, y), 0);
++  vec4 t1 = imageLoad(input, ivec2(x1, y), 0);
++  vec4 t2 = imageLoad(input, ivec2(x2, y), 0);
++  vec4 t3 = imageLoad(input, ivec2(x3, y), 0);
++
++  rgbaRowFFT(y, x0...x3, t0...t3);
++
++  #if INV == 1
++    float normalizer = 1.0;
++  #else
++    float normalizer = 1.0 / float(N);
++  #endif
++  imageStore(output, ivec2(y, x0), t0 * normalizer);
++  imageStore(output, ivec2(y, x1), t1 * normalizer);
++  imageStore(output, ivec2(y, x2), t2 * normalizer);
++  imageStore(output, ivec2(y, x3), t3 * normalizer);
++*/
++
++// avoid passing x0-x3 to reduce register pressure, only pass x and compute others inside the function, can #define multiples of N_4_1
++void rgbaRowFFT(uint y, uint x, inout vec4 t0, inout vec4 t1, inout vec4 t2, inout vec4 t3) {
++	#if FFT_SIZE == 2048
++		// load rg as real and imag and do radix 2 prepass
++		uint p00 = digit_reverse_4(x) << 1;
++		row[swizzle(p00)]     = t0.rg + t2.rg;
++		row[swizzle(p00 + 1)] = t0.rg - t2.rg;
++
++		uint p01 = digit_reverse_4(x + N_4_1) << 1;
++		row[swizzle(p01)]     = t1.rg + t3.rg;
++		row[swizzle(p01 + 1)] = t1.rg - t3.rg;
++	#else
++		// load rg as real and imag
++		row[swizzle(digit_reverse_4(x))] = t0.rg;
++		row[swizzle(digit_reverse_4(x + N_4_1))] = t1.rg;
++		row[swizzle(digit_reverse_4(x + N_4_2))] = t2.rg;
++		row[swizzle(digit_reverse_4(x + N_4_3))] = t3.rg;
++	#endif
++  barrier();
++
++  for (uint Ns = START_Ns; Ns <= FFT_SIZE; Ns <<= 2) {
++    fftR4_CT(x, Ns);
++    barrier();
++  }
++
++  // store rg fft output
++  t0.rg = row[swizzle(x)];
++  t1.rg = row[swizzle(x + N_4_1)];
++  t2.rg = row[swizzle(x + N_4_2)];
++  t3.rg = row[swizzle(x + N_4_3)];
++  barrier();
++
++	#if FFT_SIZE == 2048
++		// load rg as real and imag and do radix 2 prepass
++		uint p10 = digit_reverse_4(x) << 1;
++		row[swizzle(p10)]     = t0.ba + t2.ba;
++		row[swizzle(p10 + 1)] = t0.ba - t2.ba;
++
++		uint p11 = digit_reverse_4(x + N_4_1) << 1;
++		row[swizzle(p11)]     = t1.ba + t3.ba;
++		row[swizzle(p11 + 1)] = t1.ba - t3.ba;
++	#else
++    // load ba as real and imag
++		row[swizzle(digit_reverse_4(x))] = t0.ba;
++		row[swizzle(digit_reverse_4(x + N_4_1))] = t1.ba;
++		row[swizzle(digit_reverse_4(x + N_4_2))] = t2.ba;
++		row[swizzle(digit_reverse_4(x + N_4_3))] = t3.ba;
++	#endif
++  barrier();
++
++  for (uint Ns = START_Ns; Ns <= FFT_SIZE; Ns <<= 2) {
++    fftR4_CT(x, Ns);
++    barrier();
++  }
++
++  // store combination of r and g FFT output (transposed)
++  t0.ba = row[swizzle(x)];
++  t1.ba = row[swizzle(x + N_4_1)];
++  t2.ba = row[swizzle(x + N_4_2)];
++  t3.ba = row[swizzle(x + N_4_3)];
++}
+\ No newline at end of file
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl 0.8.22-patched/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl
 --- 0.8.22-orig/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl	2026-05-10 15:41:03.585629300 -0700
-+++ 0.8.22-patched/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl	2026-05-10 15:40:14.000000000 -0700
++++ 0.8.22-patched/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl	2026-05-10 18:37:22.000000000 -0700
 @@ -61,14 +61,66 @@
  	return disc;
  }
@@ -130,9 +286,9 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/BasicFunc
  
  		rayleigh = mix(rayleigh, vec3(Luminance(rayleigh)) * atmosphereModel_solar_irradiance, wetness * 0.5);
  
-diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/BasicFunctions/Sunlight_Shadow.glsl 0.8.22-patched/shaders/Lib/BasicFunctions/Sunlight_Shadow.glsl
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/BasicFunctions/Sunlight_Shadow.glsl 0.8.22-patched/shaders/Lib/BasicFunctions/Sunlight_Shadow.glsl
 --- 0.8.22-orig/shaders/Lib/BasicFunctions/Sunlight_Shadow.glsl	2026-05-10 15:41:03.601604100 -0700
-+++ 0.8.22-patched/shaders/Lib/BasicFunctions/Sunlight_Shadow.glsl	2026-05-10 15:40:14.000000000 -0700
++++ 0.8.22-patched/shaders/Lib/BasicFunctions/Sunlight_Shadow.glsl	2026-05-10 18:37:22.000000000 -0700
 @@ -155,7 +155,7 @@
  
  			spread = max3(
@@ -150,9 +306,9 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/BasicFunc
  	return result;
  }
  
-diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/IndividualFunctions/DOF.glsl 0.8.22-patched/shaders/Lib/IndividualFunctions/DOF.glsl
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/IndividualFunctions/DOF.glsl 0.8.22-patched/shaders/Lib/IndividualFunctions/DOF.glsl
 --- 0.8.22-orig/shaders/Lib/IndividualFunctions/DOF.glsl	2026-05-10 15:41:03.843377400 -0700
-+++ 0.8.22-patched/shaders/Lib/IndividualFunctions/DOF.glsl	2026-05-10 15:40:14.000000000 -0700
++++ 0.8.22-patched/shaders/Lib/IndividualFunctions/DOF.glsl	2026-05-10 18:37:22.000000000 -0700
 @@ -6,9 +6,9 @@
  
  float GetLinearDepth(vec2 coord){
@@ -165,9 +321,9 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Individua
  	#endif
  
  	#ifdef LOD_RENDERING
-diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/IndividualFunctions/NUBIS.glsl 0.8.22-patched/shaders/Lib/IndividualFunctions/NUBIS.glsl
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/IndividualFunctions/NUBIS.glsl 0.8.22-patched/shaders/Lib/IndividualFunctions/NUBIS.glsl
 --- 0.8.22-orig/shaders/Lib/IndividualFunctions/NUBIS.glsl	2026-05-10 15:41:03.889973900 -0700
-+++ 0.8.22-patched/shaders/Lib/IndividualFunctions/NUBIS.glsl	2026-05-10 16:22:33.118938900 -0700
++++ 0.8.22-patched/shaders/Lib/IndividualFunctions/NUBIS.glsl	2026-05-10 18:37:22.000000000 -0700
 @@ -16,10 +16,9 @@
  	//Coverage
  		float coverageNoise = textureLod(CloudNoise3D, cloudPos.xyz * vec3(8.5e-5, 1e-5, 8.5e-5) + windDirection + CLOUD_COVERAGE_NOISE_OFFSET, 0.0).x;
@@ -241,9 +397,9 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Individua
 +	return mix(1 - FINAL_CLOUD_COVERAGE, exp2(-smoothstep(0,1,cloudDensity) * 20.0), cloudShadowDamping);
  }
 \ No newline at end of file
-diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/IndividualFunctions/PlanarClouds.glsl 0.8.22-patched/shaders/Lib/IndividualFunctions/PlanarClouds.glsl
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/IndividualFunctions/PlanarClouds.glsl 0.8.22-patched/shaders/Lib/IndividualFunctions/PlanarClouds.glsl
 --- 0.8.22-orig/shaders/Lib/IndividualFunctions/PlanarClouds.glsl	2026-05-10 15:41:03.923129700 -0700
-+++ 0.8.22-patched/shaders/Lib/IndividualFunctions/PlanarClouds.glsl	2026-05-10 15:40:14.000000000 -0700
++++ 0.8.22-patched/shaders/Lib/IndividualFunctions/PlanarClouds.glsl	2026-05-10 18:37:22.000000000 -0700
 @@ -110,10 +110,10 @@
  	float intersection = RaySphereIntersection(rayStartPos, worldDir, planetRadius + PC_ALTITUDE).y;
  
@@ -257,9 +413,9 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Individua
  
  		float VdotL = dot(worldDir, worldShadowVector) * 0.5 + 0.5;
  
-diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/IndividualFunctions/VolumetricFog.glsl 0.8.22-patched/shaders/Lib/IndividualFunctions/VolumetricFog.glsl
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/IndividualFunctions/VolumetricFog.glsl 0.8.22-patched/shaders/Lib/IndividualFunctions/VolumetricFog.glsl
 --- 0.8.22-orig/shaders/Lib/IndividualFunctions/VolumetricFog.glsl	2026-05-10 15:41:03.970044100 -0700
-+++ 0.8.22-patched/shaders/Lib/IndividualFunctions/VolumetricFog.glsl	2026-05-10 15:40:14.000000000 -0700
++++ 0.8.22-patched/shaders/Lib/IndividualFunctions/VolumetricFog.glsl	2026-05-10 18:37:22.000000000 -0700
 @@ -1,4 +1,6 @@
 -
 +#ifdef CLOUD_SHADOW
@@ -348,9 +504,24 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Individua
  
  		rayDensity += stepRayDensity * shadow;
  
-diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl 0.8.22-patched/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/PathTracing/Tracer/SpecularTracer.glsl 0.8.22-patched/shaders/Lib/PathTracing/Tracer/SpecularTracer.glsl
+--- 0.8.22-orig/shaders/Lib/PathTracing/Tracer/SpecularTracer.glsl	2026-05-10 15:41:04.184803100 -0700
++++ 0.8.22-patched/shaders/Lib/PathTracing/Tracer/SpecularTracer.glsl	2026-05-23 23:26:31.777502900 -0700
+@@ -335,7 +335,10 @@
+ 
+ 					#ifdef DIMENSION_OVERWORLD
+ 					#ifdef SUNLIGHT_LEAK_FIX
+-						sunLighting *= saturate(hitSkylight * 444.0 + float(isEyeInWater == 1));
++						// sunLighting *= saturate(hitSkylight * 444.0 + float(isEyeInWater == 1));
++						float originalMask = saturate(hitSkylight * 444.0 + float(isEyeInWater == 1));
++						float eyeSkylight = saturate(float(eyeBrightnessSmooth.y) / 240.0);
++						sunLighting *= mix(1.0, originalMask, saturate(1.0 - eyeSkylight * 10.0));
+ 					#endif
+ 					#endif
+ 					/*
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl 0.8.22-patched/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl
 --- 0.8.22-orig/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl	2026-05-10 15:41:04.640234000 -0700
-+++ 0.8.22-patched/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl	2026-05-10 15:56:33.613183400 -0700
++++ 0.8.22-patched/shaders/Lib/Programs/Composite/DiffuseTracing_FS.glsl	2026-05-23 23:26:41.023811300 -0700
 @@ -52,6 +52,82 @@
  	#include "/Lib/IndividualFunctions/EndSkyTimer.glsl"
  #endif
@@ -434,7 +605,19 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/
  
  vec3 SkyLighting(vec3 raydir, float pdf, float lightmap){
  	//float SdotN = dot(worldNormal, normalize(worldSunVector + vec3(0.0, 1.0, 0.0)));
-@@ -524,6 +600,10 @@
+@@ -508,7 +584,10 @@
+ 					#endif
+ 					#ifdef DIMENSION_OVERWORLD
+ 					#ifdef SUNLIGHT_LEAK_FIX
+-						sunLighting *= saturate(hitSkylight * 444.0 + float(isEyeInWater == 1));
++						// sunLighting *= saturate(hitSkylight * 444.0 + float(isEyeInWater == 1));
++						float originalMask = saturate(hitSkylight * 444.0 + float(isEyeInWater == 1));
++						float eyeSkylight = saturate(float(eyeBrightnessSmooth.y) / 240.0);
++						sunLighting *= mix(1.0, originalMask, saturate(1.0 - eyeSkylight * 10.0));
+ 					#endif
+ 					#endif
+ 					/*
+@@ -524,6 +603,10 @@
  					if (sunLighting > 0.0){
  						vec3 hitWorldPos = hitVoxelPos - cameraPositionFract - (voxelResolution * 0.5);
  						vec3 sunColor = sunLight * SimpleShadow(hitWorldPos, hitNormal) * sunLighting;
@@ -445,9 +628,230 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/
  						diffuse += sunColor * hitSurface;
  					}
  				#endif
-diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Composite/PixelData_VS.glsl 0.8.22-patched/shaders/Lib/Programs/Composite/PixelData_VS.glsl
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Composite/IRC_CS.glsl 0.8.22-patched/shaders/Lib/Programs/Composite/IRC_CS.glsl
+--- 0.8.22-orig/shaders/Lib/Programs/Composite/IRC_CS.glsl	2026-05-10 15:41:04.721176400 -0700
++++ 0.8.22-patched/shaders/Lib/Programs/Composite/IRC_CS.glsl	2026-05-23 23:26:51.492316200 -0700
+@@ -480,7 +480,10 @@
+ 						#endif
+ 						#ifdef DIMENSION_OVERWORLD
+ 						#ifdef SUNLIGHT_LEAK_FIX
+-							sunLighting *= saturate(hitSkylight * 444.0 + float(isEyeInWater == 1));
++							// sunLighting *= saturate(hitSkylight * 444.0 + float(isEyeInWater == 1));
++							float originalMask = saturate(hitSkylight * 444.0 + float(isEyeInWater == 1));
++							float eyeSkylight = saturate(float(eyeBrightnessSmooth.y) / 240.0);
++							sunLighting *= mix(1.0, originalMask, saturate(1.0 - eyeSkylight * 10.0));
+ 						#endif
+ 						#endif
+ 						/*
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Composite/ImageConvolveIFFT_CS.glsl 0.8.22-patched/shaders/Lib/Programs/Composite/ImageConvolveIFFT_CS.glsl
+--- 0.8.22-orig/shaders/Lib/Programs/Composite/ImageConvolveIFFT_CS.glsl	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/Lib/Programs/Composite/ImageConvolveIFFT_CS.glsl	2026-05-26 16:38:53.475590500 -0700
+@@ -0,0 +1,103 @@
++// unpack image and kernel spectra and complex multiply
++// ifft and save to image
++
++#include "/Lib/UniformDeclare.glsl"
++#include "/Lib/Utilities.glsl"
++
++#include "/Lib/BasicFunctions/FFT.glsl"
++
++// N rows, N/4 threads per row
++const ivec3 workGroups = ivec3(1, FFT_SIZE, 1);
++layout (local_size_x = N_4_1, local_size_y = 1) in;
++
++#define IFFT
++
++#ifdef ROW
++// Row pass ===================================================================
++
++layout (rgba32f) uniform image2D kerFFT;
++layout (rgba32f) uniform image2D imgFFT;
++layout (rgba32f) uniform writeonly image2D tmpFFT;
++
++vec4 freqConvolve(ivec2 coord) {
++  if (coord.x >= FFT_SIZE || coord.y >= FFT_SIZE) return vec4(0.0);
++
++  // get symmetric coordinate -k = (N - x) % N
++  ivec2 symCoord = (ivec2(FFT_SIZE) - coord) & ivec2(FFT_SIZE - 1); // Modulo using bitwise AND for power-of-two sizes
++
++  // fetch current and symmetric samples for both image and kernel
++
++  // unpack and convolve, 0.5 factored out and applied at end
++  vec4 h_img    = imageLoad(imgFFT, coord);
++  vec4 h_imgSym = imageLoad(imgFFT, symCoord);
++  vec4 h_ker    = imageLoad(kerFFT, coord);
++  vec4 h_kerSym = imageLoad(kerFFT, symCoord);
++  
++  vec2 F_R = vec2(h_img.x + h_imgSym.x, h_img.y - h_imgSym.y);
++  vec2 K_R = vec2(h_ker.x + h_kerSym.x, h_ker.y - h_kerSym.y);
++  vec2 Out_R = cmul(F_R, K_R);
++
++  vec2 F_G = vec2(h_img.y + h_imgSym.y, h_imgSym.x - h_img.x);
++  vec2 K_G = vec2(h_ker.y + h_kerSym.y, h_kerSym.x - h_ker.x);
++  vec2 Out_G = cmul(F_G, K_G);
++
++  vec2 F_B = vec2(h_img.z + h_imgSym.z, h_img.w - h_imgSym.w);
++  vec2 K_B = vec2(h_ker.z + h_kerSym.z, h_ker.y - h_kerSym.y);
++  vec2 Out_B = cmul(F_B, K_B);
++
++  vec2 F_A = vec2(h_img.w + h_imgSym.w, h_imgSym.z - h_img.z);
++  vec2 K_A = vec2(h_ker.w + h_kerSym.w, h_kerSym.z - h_ker.z);
++  vec2 Out_A = cmul(F_A, K_A);
++
++  // repack into rgba for ifft
++  return 0.25 * vec4(
++    Out_R.x - Out_G.y,
++    Out_R.y + Out_G.x,
++    Out_B.x - Out_A.y,
++    Out_B.y + Out_A.x
++  );
++}
++
++
++
++void main() {
++  uint y = gl_GlobalInvocationID.y;
++  uint x = gl_GlobalInvocationID.x;
++
++  vec4 t0 = freqConvolve(ivec2(x, y));
++  vec4 t1 = freqConvolve(ivec2(x + N_4_1, y));
++  vec4 t2 = freqConvolve(ivec2(x + N_4_2, y));
++  vec4 t3 = freqConvolve(ivec2(x + N_4_3, y));
++
++  rgbaRowFFT(y, x, t0, t1, t2, t3);
++
++  imageStore(tmpFFT, ivec2(y, x), t0);
++  imageStore(tmpFFT, ivec2(y, x + N_4_1), t1);
++  imageStore(tmpFFT, ivec2(y, x + N_4_2), t2);
++  imageStore(tmpFFT, ivec2(y, x + N_4_3), t3);
++}
++
++#else
++// Column pass ================================================================
++
++layout (rgba32f) uniform image2D tmpFFT;
++layout (rgba32f) uniform writeonly image2D imgFFT;
++
++void main() {
++  uint y = gl_GlobalInvocationID.y;
++  uint x = gl_GlobalInvocationID.x;
++
++  vec4 t0 = imageLoad(tmpFFT, ivec2(x, y));
++  vec4 t1 = imageLoad(tmpFFT, ivec2(x + N_4_1, y));
++  vec4 t2 = imageLoad(tmpFFT, ivec2(x + N_4_2, y));
++  vec4 t3 = imageLoad(tmpFFT, ivec2(x + N_4_3, y));
++
++  rgbaRowFFT(y, x, t0, t1, t2, t3);
++
++  imageStore(imgFFT, ivec2(y, x), t0 * NORM);
++  imageStore(imgFFT, ivec2(y, x + N_4_1), t1 * NORM);
++  imageStore(imgFFT, ivec2(y, x + N_4_2), t2 * NORM);
++  imageStore(imgFFT, ivec2(y, x + N_4_3), t3 * NORM);
++}
++
++#endif
+\ No newline at end of file
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Composite/ImageFFT_CS.glsl 0.8.22-patched/shaders/Lib/Programs/Composite/ImageFFT_CS.glsl
+--- 0.8.22-orig/shaders/Lib/Programs/Composite/ImageFFT_CS.glsl	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/Lib/Programs/Composite/ImageFFT_CS.glsl	2026-05-26 16:38:59.889197900 -0700
+@@ -0,0 +1,93 @@
++// run once per frame
++// compute FFT of image and write to image
++
++#include "/Lib/UniformDeclare.glsl"
++#include "/Lib/Utilities.glsl"
++
++#include "/Lib/BasicFunctions/FFT.glsl"
++
++// N rows, N/4 threads per row
++const ivec3 workGroups = ivec3(1, FFT_SIZE, 1);
++layout (local_size_x = N_4_1, local_size_y = 1) in;
++
++#ifdef ROW
++// Row pass ===================================================================
++
++// FBTEX_MAIN_OUTPUT already declared in UniformDeclare.glsl
++layout (rgba32f) uniform writeonly image2D tmpFFT;
++
++float GetExposureValue(){
++	return texelFetch(pixelData2D, ivec2(PIXELDATA_EXPOSURE, 0), 0).y;
++}
++
++#ifdef CAP_LUMINANCE
++  const float maxLuminance = float(1 << CAP_LUMINANCE);
++#endif
++
++// soft knee thresholding
++vec4 softKnee(vec4 color) {
++  float l = Luminance(color.rgb);
++  float x = max(0, l - BLOOM_THRESHOLD + BLOOM_KNEE);
++  color.rgb *= mix(x * x / (4 * BLOOM_KNEE), max(0, l - BLOOM_THRESHOLD), float(x > BLOOM_THRESHOLD + BLOOM_KNEE)) / max(l, 1e-6);
++  #ifdef CAP_LUMINANCE
++    color *= min(1.0, maxLuminance / l);
++  #endif
++  return color;
++}
++
++// downsample and pad scene texture into the FFT workspace with correct aspect ratio
++vec4 sampleThresholdedSceneTex(uint x, uint y) {
++  float maxDim = float(FFT_SIZE - KERNEL_SIZE);
++  vec2 size = aspectRatio >= 1.0 ? vec2(maxDim, maxDim / aspectRatio) : vec2(maxDim * aspectRatio, maxDim);
++  // zero pad outside valid image region
++  if (any(greaterThanEqual(vec2(x, y), size))) {
++    return vec4(0.0);
++  }
++
++  // map thread coordinates to uv
++  vec2 uv = (vec2(x, y) + 0.5) / size;
++
++  return softKnee(textureLod(FBTEX_MAIN_OUTPUT, uv, 0) * GetExposureValue());
++}
++
++void main() {
++  uint y = gl_GlobalInvocationID.y;
++  uint x = gl_GlobalInvocationID.x;
++
++  vec4 t0 = sampleThresholdedSceneTex(x, y);
++  vec4 t1 = sampleThresholdedSceneTex(x + N_4_1, y);
++  vec4 t2 = sampleThresholdedSceneTex(x + N_4_2, y);
++  vec4 t3 = sampleThresholdedSceneTex(x + N_4_3, y);
++
++  rgbaRowFFT(y, x, t0, t1, t2, t3);
++
++  imageStore(tmpFFT, ivec2(y, x),         t0);
++  imageStore(tmpFFT, ivec2(y, x + N_4_1), t1);
++  imageStore(tmpFFT, ivec2(y, x + N_4_2), t2);
++  imageStore(tmpFFT, ivec2(y, x + N_4_3), t3);
++}
++
++#else
++// Column pass ================================================================
++
++layout (rgba32f) uniform image2D tmpFFT;
++layout (rgba32f) uniform writeonly image2D imgFFT;
++
++void main() {
++  uint y = gl_GlobalInvocationID.y;
++  uint x = gl_GlobalInvocationID.x;
++
++  vec4 t0 = imageLoad(tmpFFT, ivec2(x, y));
++  vec4 t1 = imageLoad(tmpFFT, ivec2(x + N_4_1, y));
++  vec4 t2 = imageLoad(tmpFFT, ivec2(x + N_4_2, y));
++  vec4 t3 = imageLoad(tmpFFT, ivec2(x + N_4_3, y));
++
++  rgbaRowFFT(y, x, t0, t1, t2, t3);
++
++  imageStore(imgFFT, ivec2(y, x),         t0 * NORM);
++  imageStore(imgFFT, ivec2(y, x + N_4_1), t1 * NORM);
++  imageStore(imgFFT, ivec2(y, x + N_4_2), t2 * NORM);
++  imageStore(imgFFT, ivec2(y, x + N_4_3), t3 * NORM);
++}
++
++#endif
+\ No newline at end of file
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Composite/PixelData_VS.glsl 0.8.22-patched/shaders/Lib/Programs/Composite/PixelData_VS.glsl
 --- 0.8.22-orig/shaders/Lib/Programs/Composite/PixelData_VS.glsl	2026-05-10 15:41:04.773780200 -0700
-+++ 0.8.22-patched/shaders/Lib/Programs/Composite/PixelData_VS.glsl	2026-05-10 15:40:14.000000000 -0700
++++ 0.8.22-patched/shaders/Lib/Programs/Composite/PixelData_VS.glsl	2026-05-10 18:37:22.000000000 -0700
 @@ -46,11 +46,11 @@
  				if (heldItemId != 11000.0 && centerMaterialID == MATID_HAND){
  					centerDepth = texelFetch(depthtex2, centerTexelCoord, 0).x;
@@ -462,9 +866,39 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/
  
  			#endif
  
-diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Composite/SkyImage_CS.glsl 0.8.22-patched/shaders/Lib/Programs/Composite/SkyImage_CS.glsl
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Composite/SH_TRACING_CS.glsl 0.8.22-patched/shaders/Lib/Programs/Composite/SH_TRACING_CS.glsl
+--- 0.8.22-orig/shaders/Lib/Programs/Composite/SH_TRACING_CS.glsl	2026-05-10 15:41:04.821135600 -0700
++++ 0.8.22-patched/shaders/Lib/Programs/Composite/SH_TRACING_CS.glsl	2026-05-23 23:26:55.340022000 -0700
+@@ -270,7 +270,10 @@
+ 			#endif
+ 			#ifdef DIMENSION_OVERWORLD
+ 			#ifdef SUNLIGHT_LEAK_FIX
+-				sunLighting *= saturate(hitSkylight * 444.0 + float(isEyeInWater == 1));
++				// sunLighting *= saturate(hitSkylight * 444.0 + float(isEyeInWater == 1));
++				float originalMask = saturate(hitSkylight * 444.0 + float(isEyeInWater == 1));
++				float eyeSkylight = saturate(float(eyeBrightnessSmooth.y) / 240.0);
++				sunLighting *= mix(1.0, originalMask, saturate(1.0 - eyeSkylight * 10.0));
+ 			#endif
+ 			#endif
+ 			/*
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Composite/ShadowSample_FS.glsl 0.8.22-patched/shaders/Lib/Programs/Composite/ShadowSample_FS.glsl
+--- 0.8.22-orig/shaders/Lib/Programs/Composite/ShadowSample_FS.glsl	2026-05-10 15:41:04.805379300 -0700
++++ 0.8.22-patched/shaders/Lib/Programs/Composite/ShadowSample_FS.glsl	2026-05-23 23:27:01.909028900 -0700
+@@ -118,7 +118,10 @@
+ 		#endif
+ 		#ifdef DIMENSION_OVERWORLD
+ 		#ifdef SUNLIGHT_LEAK_FIX
+-			float lightMask = saturate(gbuffer.lightmap.g * 1e5 + float(isEyeInWater == 1));
++			// float lightMask = saturate(gbuffer.lightmap.g * 1e5 + float(isEyeInWater == 1));
++			float originalMask = saturate(gbuffer.lightmap.g * 1e5 + float(isEyeInWater == 1));
++			float eyeSkylight = saturate(float(eyeBrightnessSmooth.y) / 240.0);
++			float lightMask = mix(1.0, originalMask, saturate(1.0 - eyeSkylight * 10.0));
+ 			shadow *= lightMask;
+ 		#endif
+ 		#endif
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Composite/SkyImage_CS.glsl 0.8.22-patched/shaders/Lib/Programs/Composite/SkyImage_CS.glsl
 --- 0.8.22-orig/shaders/Lib/Programs/Composite/SkyImage_CS.glsl	2026-05-10 15:41:04.837623800 -0700
-+++ 0.8.22-patched/shaders/Lib/Programs/Composite/SkyImage_CS.glsl	2026-05-10 16:20:14.417889500 -0700
++++ 0.8.22-patched/shaders/Lib/Programs/Composite/SkyImage_CS.glsl	2026-05-10 18:37:22.000000000 -0700
 @@ -110,7 +110,7 @@
  		float cloudTransmittance = 1.0;
  		#ifdef VOLUMETRIC_CLOUDS
@@ -474,9 +908,9 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/
  		#endif
  
  		#ifdef PLANAR_CLOUDS
-diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl 0.8.22-patched/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl 0.8.22-patched/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl
 --- 0.8.22-orig/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl	2026-05-10 15:41:04.870457400 -0700
-+++ 0.8.22-patched/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl	2026-05-10 16:15:49.807197700 -0700
++++ 0.8.22-patched/shaders/Lib/Programs/Composite/Sky_Overworld_FS.glsl	2026-05-10 18:37:22.000000000 -0700
 @@ -33,11 +33,11 @@
  
  vec3 HashStars(vec3 worldDir){
@@ -523,9 +957,9 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/
  	#endif
  
  	#ifdef PLANAR_CLOUDS
-diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Composite/Soild_FS.glsl 0.8.22-patched/shaders/Lib/Programs/Composite/Soild_FS.glsl
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Composite/Soild_FS.glsl 0.8.22-patched/shaders/Lib/Programs/Composite/Soild_FS.glsl
 --- 0.8.22-orig/shaders/Lib/Programs/Composite/Soild_FS.glsl	2026-05-10 15:41:04.887489000 -0700
-+++ 0.8.22-patched/shaders/Lib/Programs/Composite/Soild_FS.glsl	2026-05-10 15:40:14.000000000 -0700
++++ 0.8.22-patched/shaders/Lib/Programs/Composite/Soild_FS.glsl	2026-05-23 23:27:09.272842200 -0700
 @@ -183,9 +183,14 @@
  	in vec3 shadowVector;
  
@@ -562,9 +996,62 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/
  
  		gbuffer.material.scattering *= saturate(1.0 - materialMask.leaves - materialMask.grass);
  		gbuffer.worldNormal = normalize(mix(gbuffer.worldNormal, vec3(0.0, 1.0, 0.0), materialMask.grass * 0.49));
-diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Composite/Volumetric_FS.glsl 0.8.22-patched/shaders/Lib/Programs/Composite/Volumetric_FS.glsl
+@@ -621,7 +623,11 @@
+ 			#endif
+ 			#ifdef DIMENSION_OVERWORLD
+ 			#ifdef SUNLIGHT_LEAK_FIX
+-				float lightMask = saturate(gbuffer.lightmap.g * 1e5 + float(isEyeInWater == 1));
++				// float lightMask = saturate(gbuffer.lightmap.g * 1e5 + float(isEyeInWater == 1));
++				float originalMask = saturate(gbuffer.lightmap.g * 1e5 + float(isEyeInWater == 1));
++				float eyeSkylight = saturate(float(eyeBrightnessSmooth.y) / 240.0);
++				float lightMask = mix(1.0, originalMask, saturate(1.0 - eyeSkylight * 10.0));
++
+ 				shadow *= lightMask;
+ 			#endif
+ 			#endif
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Composite/SpecularTracing_FS.glsl 0.8.22-patched/shaders/Lib/Programs/Composite/SpecularTracing_FS.glsl
+--- 0.8.22-orig/shaders/Lib/Programs/Composite/SpecularTracing_FS.glsl	2026-05-10 15:41:04.971673300 -0700
++++ 0.8.22-patched/shaders/Lib/Programs/Composite/SpecularTracing_FS.glsl	2026-05-23 23:27:12.674103000 -0700
+@@ -92,7 +92,10 @@
+ 		#ifdef DIMENSION_OVERWORLD
+ 			float highlightStrength = float(isSmooth && (isEyeInWater == 0 || materialMask.water < 0.5)) * shadowHighlightStrength;
+ 			#ifdef SUNLIGHT_LEAK_FIX
+-				highlightStrength *= saturate(gbuffer.lightmap.g * 1e10);
++				// highlightStrength *= saturate(gbuffer.lightmap.g * 1e10);
++				float originalMask = saturate(gbuffer.lightmap.g * 1e10);
++				float eyeSkylight = saturate(float(eyeBrightnessSmooth.y) / 240.0);
++				highlightStrength *= mix(1.0, originalMask, saturate(1.0 - eyeSkylight * 10.0));
+ 			#endif
+ 		#else
+ 			const float highlightStrength = 0.0;
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Composite/Translucent_FS.glsl 0.8.22-patched/shaders/Lib/Programs/Composite/Translucent_FS.glsl
+--- 0.8.22-orig/shaders/Lib/Programs/Composite/Translucent_FS.glsl	2026-05-10 15:41:05.022866400 -0700
++++ 0.8.22-patched/shaders/Lib/Programs/Composite/Translucent_FS.glsl	2026-05-23 23:27:16.386664500 -0700
+@@ -446,7 +446,10 @@
+ 		#ifdef DIMENSION_OVERWORLD
+ 			sunlight *= 1.0 - wetness * RAIN_SHADOW;
+ 			#ifdef SUNLIGHT_LEAK_FIX
+-				sunlight *= saturate(lightmap.g * 1e5 + float(isEyeInWater == 1));
++				// sunlight *= saturate(lightmap.g * 1e5 + float(isEyeInWater == 1));
++				float originalMask = saturate(lightmap.g * 1e5 + float(isEyeInWater == 1));
++				float eyeSkylight = saturate(float(eyeBrightnessSmooth.y) / 240.0);
++				sunlight *= mix(1.0, originalMask, saturate(1.0 - eyeSkylight * 10.0));
+ 			#endif
+ 			particleColor += ParticleShadow(worldPos, voxelPos, particleNormal, waterDist, sunlight, lightmap.g) * colorSunlight;
+ 		#else
+@@ -710,6 +713,9 @@
+ 						float highlightStrength = shadowHighlightStrength;
+ 						#ifdef SUNLIGHT_LEAK_FIX
+ 							highlightStrength *= saturate(gbuffer.lightmap.g * 1e10);
++							// float originalMask = saturate(gbuffer.lightmap.g * 1e10);
++							// float eyeSkylight = saturate(float(eyeBrightnessSmooth.y) / 240.0);
++							// highlightStrength *= mix(1.0, originalMask, saturate(1.0 - eyeSkylight * 10.0));
+ 						#endif
+ 					#else
+ 						const float highlightStrength = 0.0;
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Composite/Volumetric_FS.glsl 0.8.22-patched/shaders/Lib/Programs/Composite/Volumetric_FS.glsl
 --- 0.8.22-orig/shaders/Lib/Programs/Composite/Volumetric_FS.glsl	2026-05-10 15:41:05.038382300 -0700
-+++ 0.8.22-patched/shaders/Lib/Programs/Composite/Volumetric_FS.glsl	2026-05-10 16:34:27.596347500 -0700
++++ 0.8.22-patched/shaders/Lib/Programs/Composite/Volumetric_FS.glsl	2026-05-10 19:20:16.000000000 -0700
 @@ -58,6 +58,9 @@
  
  #ifdef DIMENSION_OVERWORLD
@@ -575,16 +1062,17 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/
  	#define FULL_WATERFOG
  	#include "/Lib/IndividualFunctions/WaterFog.glsl"
  #endif
-@@ -153,7 +156,26 @@
+@@ -153,7 +156,27 @@
  		#endif
  
  		#ifdef LANDSCATTERING
 -			if (isEyeInWater == 0) LandAtmosphericScattering(color, waterDist, vec3(0.0), rayWorldPos, worldDir, materialMask.sky > 0.5);
 +			if (isEyeInWater == 0) {
-+				vec2 cloudAltitude = vec2(mix(CLOUD_CLEAR_ALTITUDE, CLOUD_RAIN_ALTITUDE, wetness));
-+				cloudAltitude.y += mix(CLOUD_CLEAR_THICKNESS, CLOUD_RAIN_THICKNESS, wetness);
-+				bool isAboveClouds = (cameraPosition.y > cloudAltitude.x) && (cameraPosition.y < cloudAltitude.y || worldDir.y < 0.0);
 +				#ifdef VOLUMETRIC_CLOUDS
++					// change order of land scattering and volumetric clouds based on camera position
++					vec2 cloudAltitude = vec2(mix(CLOUD_CLEAR_ALTITUDE, CLOUD_RAIN_ALTITUDE, wetness));
++					cloudAltitude.y += mix(CLOUD_CLEAR_THICKNESS, CLOUD_RAIN_THICKNESS, wetness);
++					bool isAboveClouds = (cameraPosition.y > cloudAltitude.x) && (cameraPosition.y < cloudAltitude.y || worldDir.y < 0.0);
 +					if (isAboveClouds) LandAtmosphericScattering(color, waterDist, vec3(0.0), rayWorldPos, worldDir, materialMask.sky > 0.5);
 +					float cloudTransmittance = 1.0;
 +					#ifdef ATMO_HORIZON
@@ -603,10 +1091,111 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/
  		#endif
  
  		float globalCloudShadow = 1.0 - wetness * (RAIN_SHADOW * 0.985);
-diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Final_FS.glsl 0.8.22-patched/shaders/Lib/Programs/Final_FS.glsl
+@@ -262,7 +285,6 @@
+ 		#endif
+ 	#endif
+ 
+-
+ 	#ifdef DISABLE_SKY_RENDERING
+ 		if (depth == 1.0) color = vec3(0.0);
+ 	#endif
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Final_FS.glsl 0.8.22-patched/shaders/Lib/Programs/Final_FS.glsl
 --- 0.8.22-orig/shaders/Lib/Programs/Final_FS.glsl	2026-05-10 15:41:04.343945100 -0700
-+++ 0.8.22-patched/shaders/Lib/Programs/Final_FS.glsl	2026-05-10 15:46:42.167134100 -0700
-@@ -1292,6 +1292,19 @@
++++ 0.8.22-patched/shaders/Lib/Programs/Final_FS.glsl	2026-05-26 16:51:36.905529700 -0700
+@@ -316,6 +316,8 @@
+ 
+ 
+ 
++
++
+ #ifdef PT_TRACING_EYE
+ 
+ uniform sampler2D shadowtex0;
+@@ -499,7 +501,10 @@
+ 
+ 				#ifdef DIMENSION_OVERWORLD
+ 				#ifdef SUNLIGHT_LEAK_FIX
+-					sunLighting *= saturate(hitSkylight * 444.0 + float(isEyeInWater == 1));
++					// sunLighting *= saturate(hitSkylight * 444.0 + float(isEyeInWater == 1));
++					float originalMask = saturate(hitSkylight * 444.0 + float(isEyeInWater == 1));
++					float eyeSkylight = saturate(float(eyeBrightnessSmooth.y) / 240.0);
++					sunLighting *= mix(1.0, originalMask, saturate(1.0 - eyeSkylight * 10.0));
+ 				#endif
+ 				#endif
+ 
+@@ -597,6 +602,29 @@
+ 
+ uniform sampler2D pixelData2D;
+ //*/
++// layout (rgba32f) uniform image2D imgFFT;
++uniform sampler2D imgFFT_s;
++
++vec3 getConvBloom(vec2 coord) {
++	vec2 coordScale = vec2(1.0 - float(KERNEL_SIZE) / float(FFT_SIZE));
++
++	// Determine bounding box dimensions based on aspect ratio
++	if (aspectRatio >= 1.0) {
++		coordScale.y /= aspectRatio;
++	} else {
++		coordScale.x *= aspectRatio;
++	}
++	return max(vec3(0.0), texture2D(imgFFT_s, 1.0 - (coord - 2) * pixelSize * coordScale).rgb);
++}
++
++#if defined DIMENSION_OVERWORLD
++	const int ConvBloomStrength = (1 << CONV_BLOOM_STRENGTH);
++#elif defined DIMENSION_END
++	const int ConvBloomStrength = (1 << CONV_BLOOM_STRENGTH_END);
++#else
++	const int ConvBloomStrength = (1 << CONV_BLOOM_STRENGTH_NETHER);
++#endif
++
+ /////////////////////////MAIN//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+ /////////////////////////MAIN//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+ void main(){
+@@ -625,16 +653,22 @@
+ 		if (hideGUI > 0) color = color * 0.5 + texelFetch(FBTEX_ALBEDO, texelCoord, 0).rgb * 0.5;
+ 
+ 	#else
+-
+-		#ifdef BLOOM
+-			color = MergeBloom(color, 1.0 - data1.a);
+-		#endif
+-
+-		#ifdef VIGNETTE
+-			color *= Vignette(texCoord, VIGNETTE_FALLOFF, VIGNETTE_ROUNDNESS);
++		float expValue = GetExposureValue();
++		#if defined EXPOSURE_BASED_BLOOM && defined BLOOM
++		// mix between normal bloom and convolution bloom to simulate aperture adjusting based on brightness
++		 	color = mix(
++				MergeBloom(color, 1.0 - data1.a) * expValue,
++				color * expValue + 2 * ConvBloomStrength * getConvBloom(texelCoord),
++				min(1.0, EXPOSURE_BLOOM_TRANSITION / expValue)
++			); // 256, 512
++		#elif defined BLOOM && !defined CONV_BLOOM
++			color = MergeBloom(color, 1.0 - data1.a) * expValue;
++		#elif defined CONV_BLOOM
++			color = color * expValue + ConvBloomStrength * getConvBloom(texelCoord);
++		#else
++			color *= expValue;
+ 		#endif
+ 
+-		color *= GetExposureValue();
+ 
+ 		color = TONEMAP_OPERATOR(color);
+ 
+@@ -643,6 +677,10 @@
+ 		#ifdef ADVANCED_COLOR
+ 			color = ColorGrading(color);
+ 		#endif
++
++		#ifdef VIGNETTE
++			color *= Vignette(texCoord, VIGNETTE_FALLOFF, VIGNETTE_ROUNDNESS);
++		#endif
+ /*
+ 		#ifdef HAS_COLORWHEEL
+ 			#ifdef SUPER_RESOLUTION
+@@ -1292,6 +1330,19 @@
  
  	//if (texelCoord.x < 400) color = vec3(1.3);
  
@@ -626,9 +1215,9 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/
  	gl_FragData[0] = vec4(color, 0.0);
  
  }
-diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl 0.8.22-patched/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl 0.8.22-patched/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl
 --- 0.8.22-orig/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl	2026-05-10 15:41:05.672022000 -0700
-+++ 0.8.22-patched/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl	2026-05-10 15:40:14.000000000 -0700
++++ 0.8.22-patched/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl	2026-05-10 18:37:22.000000000 -0700
 @@ -30,8 +30,9 @@
  //albedo
  	vec4 albedo = parameters.sampledColour * parameters.tinting;
@@ -648,9 +1237,93 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/
  
  //normal
  	vec3 waterNormal = tbn[2];
-diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Settings.glsl 0.8.22-patched/shaders/Lib/Settings.glsl
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Setup/KernelFFT_CS.glsl 0.8.22-patched/shaders/Lib/Programs/Setup/KernelFFT_CS.glsl
+--- 0.8.22-orig/shaders/Lib/Programs/Setup/KernelFFT_CS.glsl	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/Lib/Programs/Setup/KernelFFT_CS.glsl	2026-05-26 16:39:07.722604400 -0700
+@@ -0,0 +1,79 @@
++// run once on shader load or window resize
++// compute FFT of diffraction kernel and write to image
++
++#include "/Lib/UniformDeclare.glsl"
++#include "/Lib/Utilities.glsl"
++
++#include "/Lib/BasicFunctions/FFT.glsl"
++
++// N rows, N/4 threads per row
++const ivec3 workGroups = ivec3(1, FFT_SIZE, 1);
++layout (local_size_x = N_4_1, local_size_y = 1) in;
++
++#ifdef ROW
++// Row pass ===================================================================
++
++uniform sampler2D ker;
++layout (rgba32f) uniform writeonly image2D tmpFFT;
++
++// pads and scales kernel texture for FFT input
++vec4 sampleCenterKernel(uint x, uint y) {
++  // map thread coordinates to signed distance from the FFT origin
++  int sx = int(x);
++  int sy = int(y);
++  if (sx >= int(FFT_SIZE / 2)) sx -= int(FFT_SIZE);
++  if (sy >= int(FFT_SIZE / 2)) sy -= int(FFT_SIZE);
++
++  // check if thread falls outside the target bloom size
++  int halfK = KERNEL_SIZE / 2;
++  if (abs(sx) >= halfK || abs(sy) >= halfK) {
++    return vec4(0.0);
++  }
++
++  // map the signed offset directly out from the texture center
++  vec2 uv = 0.5 + vec2(sx, sy) / float(KERNEL_SIZE);
++
++  return textureLod(ker, uv, 0.0);
++}
++
++void main() {
++  uint y = gl_GlobalInvocationID.y;
++  uint x = gl_GlobalInvocationID.x;
++
++  vec4 t0 = sampleCenterKernel(x, y);
++  vec4 t1 = sampleCenterKernel(x + N_4_1, y);
++  vec4 t2 = sampleCenterKernel(x + N_4_2, y);
++  vec4 t3 = sampleCenterKernel(x + N_4_3, y);
++
++  rgbaRowFFT(y, x, t0, t1, t2, t3);
++
++  imageStore(tmpFFT, ivec2(y, x),         t0);
++  imageStore(tmpFFT, ivec2(y, x + N_4_1), t1);
++  imageStore(tmpFFT, ivec2(y, x + N_4_2), t2);
++  imageStore(tmpFFT, ivec2(y, x + N_4_3), t3);
++}
++
++#else
++// Column pass ================================================================
++
++layout (rgba32f) uniform image2D tmpFFT;
++layout (rgba32f) uniform writeonly image2D kerFFT;
++
++void main() {
++  uint y = gl_GlobalInvocationID.y;
++  uint x = gl_GlobalInvocationID.x;
++
++  vec4 t0 = imageLoad(tmpFFT, ivec2(x, y));
++  vec4 t1 = imageLoad(tmpFFT, ivec2(x + N_4_1, y));
++  vec4 t2 = imageLoad(tmpFFT, ivec2(x + N_4_2, y));
++  vec4 t3 = imageLoad(tmpFFT, ivec2(x + N_4_3, y));
++
++  rgbaRowFFT(y, x, t0, t1, t2, t3);
++
++  imageStore(kerFFT, ivec2(y, x),         t0 * NORM);
++  imageStore(kerFFT, ivec2(y, x + N_4_1), t1 * NORM);
++  imageStore(kerFFT, ivec2(y, x + N_4_2), t2 * NORM);
++  imageStore(kerFFT, ivec2(y, x + N_4_3), t3 * NORM);
++}
++
++#endif
+\ No newline at end of file
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Settings.glsl 0.8.22-patched/shaders/Lib/Settings.glsl
 --- 0.8.22-orig/shaders/Lib/Settings.glsl	2026-05-10 15:41:03.462110000 -0700
-+++ 0.8.22-patched/shaders/Lib/Settings.glsl	2026-05-10 15:40:14.000000000 -0700
++++ 0.8.22-patched/shaders/Lib/Settings.glsl	2026-05-26 17:11:25.522761700 -0700
 @@ -570,7 +570,7 @@
  
  //Volumetric Fog------------------------
@@ -660,7 +1333,25 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Settings.
  
  	#define VFOG_NOISE_OCTAVE 			1  // [1 2 3 4 5 6]
  	#define VFOG_NOISE_HORIZONTAL_SCALE 1.0 // [0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0 2.5 3.0 5.0]
-@@ -805,6 +805,7 @@
+@@ -670,6 +670,8 @@
+ 	#define SMOOTH_EXPOSURE
+ 	#define EXPOSURE_TIME 	1.0 // [0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.2 1.4 1.6 1.8 2.0]
+ 
++	#define FLARE_EXPOSURE_COMPENSATION 0.8 // [0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0]
++
+ //Motion Blur---------------------------
+ 	#define MOTION_BLUR
+ 	#define MOTION_BLUR_DITHER
+@@ -691,7 +693,7 @@
+ 	#define NETHER_END_BLOOM_BOOST 	1.0 // [0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0]
+ 
+ 	#define LENS_GLARE
+-  //#define LENS_FLARE
++  #define LENS_FLARE
+ 	#define GLARE_BRIGHTNESS 	1.0 // [0.1 0.2 0.3 0.5 0.7 1.0 1.5 2.0 3.0 5.0 7.0 10.0 15.0 20.0]
+ 	#define FLARE_BRIGHTNESS 	1.0 // [0.1 0.2 0.3 0.5 0.7 1.0 1.5 2.0 3.0 5.0 7.0 10.0 15.0 20.0]
+   //#define GLARE_FLARE_SHADOWBASED
+@@ -805,6 +807,7 @@
  
  //DEBUG---------------------------------
  	#define WHITE_DEBUG_WORLD 0 // [0 1 2 3 4 5 6 7 8 9 10]
@@ -668,7 +1359,7 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Settings.
    //#define DEBUG_COUNTER
    //#define DISABLE_NIGHTVISION
    //#define DISABLE_BLINDNESS_DARKNESS
-@@ -814,4 +815,11 @@
+@@ -814,4 +817,41 @@
    //#define DEBUG_IRC
    //#define DISABLE_REFLECTION_TEMPORAL_MOTIONWEIGHT
  
@@ -682,10 +1373,40 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Settings.
 +	#define MOON_PHASE_LIGHTING
 +	#define NEW_MOON_BRIGHTNESS 0.005 // [0.001 0.002 0.005 0.01 0.02]
 +	#define LEAVES_SSS_MULT 2.5 // [1.0 1.5 2.0 2.5 3.0 4.0 5.0]
++
++	#define KER_TEX_SIZE 1024 // [256 512 1024]
++	#define FFT_SIZE 2048 // [1024 2048]
++// controls how much area the kernel can cover, leaves FFT_SIZE - KERNEL_SIZE pixels for the image
++	#define KERNEL_FRACTION 0.375 // [0.125 0.25 0.375 0.5]
++	const int KERNEL_SIZE = int(FFT_SIZE * KERNEL_FRACTION); // [256 384 512 768]
++
++	#define BLOOM_THRESHOLD 10.0 // [0.1 1.0 2.0 3.0 5.0 7.0 10.0 15.0 20.0]
++	#define BLOOM_KNEE_MULT 0.5 // [0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0]
++	#define CAP_LUMINANCE 5 // [-1 0 1 2 3 4 5 6 7 8 9 10]
++	const int BLOOM_KNEE = int(BLOOM_THRESHOLD * BLOOM_KNEE_MULT); // [0.0 0.2 0.4 0.8 1.0 1.5 2.0 5.0 10.0]
++	#define CONV_BLOOM
++	#define CONV_BLOOM_STRENGTH 5 // [0 1 2 3 4 5 6 7 8 9 10 11 12]
++	#define CONV_BLOOM_STRENGTH_NETHER 5 // [0 1 2 3 4 5 6 7 8 9 10 11 12]
++	#define CONV_BLOOM_STRENGTH_END 2 // [0 1 2 3 4 5 6 7 8 9 10 11 12]
++	#define EXPOSURE_BASED_BLOOM
++	#define EXPOSURE_BLOOM_TRANSITION 10 // [1 5 10 20 50 100 500 1000 5000 10000]
++
++// require bloom, autoexposure, convolution bloom when enabling exposure based bloom for pass toggling
++#ifdef EXPOSURE_BASED_BLOOM
++	#ifndef BLOOM
++		#define BLOOM
++	#endif
++	#ifdef MANUAL_EXPOSURE
++		#undef MANUAL_EXPOSURE
++	#endif
++	#ifndef CONV_BLOOM
++		#define CONV_BLOOM
++	#endif
++#endif
 \ No newline at end of file
-diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/UniformDeclare.glsl 0.8.22-patched/shaders/Lib/UniformDeclare.glsl
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/UniformDeclare.glsl 0.8.22-patched/shaders/Lib/UniformDeclare.glsl
 --- 0.8.22-orig/shaders/Lib/UniformDeclare.glsl	2026-05-10 15:41:03.492844600 -0700
-+++ 0.8.22-patched/shaders/Lib/UniformDeclare.glsl	2026-05-10 15:40:14.000000000 -0700
++++ 0.8.22-patched/shaders/Lib/UniformDeclare.glsl	2026-05-16 01:24:14.250455600 -0700
 @@ -8,10 +8,22 @@
  uniform int heldItemId2;
  uniform int heldBlockLightValue2;
@@ -741,19 +1462,233 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/UniformDe
  uniform vec2 taaJitter;
  uniform vec2 taaJitterToPrevious;
  uniform vec2 previousTaaJitter;
-diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/shaders.properties 0.8.22-patched/shaders/shaders.properties
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/composite77.csh 0.8.22-patched/shaders/composite77.csh
+--- 0.8.22-orig/shaders/composite77.csh	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/composite77.csh	2026-05-23 23:31:21.979342700 -0700
+@@ -0,0 +1,5 @@
++#version 430
++
++#define ROW
++
++#include "/Lib/Programs/Composite/ImageFFT_CS.glsl"
+\ No newline at end of file
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/composite78.csh 0.8.22-patched/shaders/composite78.csh
+--- 0.8.22-orig/shaders/composite78.csh	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/composite78.csh	2026-05-23 23:31:23.736721300 -0700
+@@ -0,0 +1,5 @@
++#version 430
++
++#define COL
++
++#include "/Lib/Programs/Composite/ImageFFT_CS.glsl"
+\ No newline at end of file
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/composite79.csh 0.8.22-patched/shaders/composite79.csh
+--- 0.8.22-orig/shaders/composite79.csh	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/composite79.csh	2026-05-23 23:31:25.430895400 -0700
+@@ -0,0 +1,5 @@
++#version 430
++
++#define ROW
++
++#include "/Lib/Programs/Composite/ImageConvolveIFFT_CS.glsl"
+\ No newline at end of file
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/composite80.csh 0.8.22-patched/shaders/composite80.csh
+--- 0.8.22-orig/shaders/composite80.csh	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/composite80.csh	2026-05-23 23:31:27.127883100 -0700
+@@ -0,0 +1,5 @@
++#version 430
++
++#define COL
++
++#include "/Lib/Programs/Composite/ImageConvolveIFFT_CS.glsl"
+\ No newline at end of file
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/composite80.fsh 0.8.22-patched/shaders/composite80.fsh
+--- 0.8.22-orig/shaders/composite80.fsh	2026-05-10 15:41:02.564122800 -0700
++++ 0.8.22-patched/shaders/composite80.fsh	1969-12-31 16:00:00.000000000 -0800
+@@ -1,8 +0,0 @@
+-#version 430
+-
+-
+-#define DIMENSION_OVERWORLD
+-#define PROGRAM_FINAL_0
+-
+-
+-#include "/Lib/Programs/Final_FS.glsl"
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/composite80.vsh 0.8.22-patched/shaders/composite80.vsh
+--- 0.8.22-orig/shaders/composite80.vsh	2026-05-10 15:41:02.578153600 -0700
++++ 0.8.22-patched/shaders/composite80.vsh	1969-12-31 16:00:00.000000000 -0800
+@@ -1,7 +0,0 @@
+-#version 430
+-
+-
+-#define DIMENSION_OVERWORLD
+-
+-
+-#include "/Lib/Programs/Composite/PixelData_VS.glsl"
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/composite81.fsh 0.8.22-patched/shaders/composite81.fsh
+--- 0.8.22-orig/shaders/composite81.fsh	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/composite81.fsh	2026-05-10 18:37:20.000000000 -0700
+@@ -0,0 +1,8 @@
++#version 430
++
++
++#define DIMENSION_OVERWORLD
++#define PROGRAM_FINAL_0
++
++
++#include "/Lib/Programs/Final_FS.glsl"
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/composite81.vsh 0.8.22-patched/shaders/composite81.vsh
+--- 0.8.22-orig/shaders/composite81.vsh	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/composite81.vsh	2026-05-10 18:37:20.000000000 -0700
+@@ -0,0 +1,7 @@
++#version 430
++
++
++#define DIMENSION_OVERWORLD
++
++
++#include "/Lib/Programs/Composite/PixelData_VS.glsl"
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/lang/en_us.lang 0.8.22-patched/shaders/lang/en_us.lang
+--- 0.8.22-orig/shaders/lang/en_us.lang	2026-05-10 15:41:03.397818800 -0700
++++ 0.8.22-patched/shaders/lang/en_us.lang	2026-05-26 16:51:11.176952000 -0700
+@@ -779,3 +779,39 @@
+ 
+ 
+ screen.DEBUG=§7Debug
++
++option.FLARE_EXPOSURE_COMPENSATION=Flare Exposure Compensation
++option.LENS_FLARE_MODE=Lens Flare Style
++value.LENS_FLARE_MODE.0=Camera (Anamorphic)
++value.LENS_FLARE_MODE.1=Human Eye (Entoptic)
++option.FLARE_GHOSTING=Ghosting
++option.GLARE_FLARE_SHADOWBASED=Based on Shadow
++
++screen.PATCHES=huj31415's patches
++option.DYNAMIC_WEATHER=Dynamic cloud cover
++option.DYNAMIC_WEATHER.comment=Vary cloud cover between days
++option.MOON_PHASE_LIGHTING=Moon phase-based night brightness
++option.NEW_MOON_BRIGHTNESS=New moon night brightness
++option.LEAVES_SSS_MULT=Leaves subsurface scattering multiplier
++
++screen.CONVOLUTION_BLOOM=Convolution bloom
++option.FFT_SIZE=FFT size
++option.FFT_SIZE.comment=Higher can resolve smaller lights but is a bit slower
++option.KERNEL_FRACTION=Kernel size
++option.KERNEL_FRACTION.comment=Fraction of the FFT size covered by the bloom kernel. Larger values result in blooms that cover more of the screen but lower bloom image resolution (only signficiant for FFT size 1024)
++option.KER_TEX_SIZE=Kernel texture size §c(Only use for custom kernel textures)
++option.KER_TEX_SIZE.comment=Controls the kernel source texture size. Does not affect the size of the bloom since the texture is sampled to the kernel size above, but resolutions less than 512 may affect the bloom's appearance. 
++option.CONV_BLOOM=Enabled
++option.CONV_BLOOM_STRENGTH=Strength (exp2)
++option.CONV_BLOOM_STRENGTH_NETHER=Strength in Nether (exp2)
++option.CONV_BLOOM_STRENGTH_END=Strength in End (exp2)
++option.CAP_LUMINANCE=Cap luminance (exp2)
++option.CAP_LUMINANCE.comment=Set to -1 to disable. Reduces dynamic range input into FFT to allow artificial light sources to bloom without the Sun becoming blown out. Enable for noticeable bloom in the dark, disable and turn down strength for the most physical result
++option.BLOOM_THRESHOLD=Bloom threshold
++option.BLOOM_THRESHOLD.comment=Minimum luminance to affect bloom
++option.BLOOM_KNEE_MULT=Threshold soft knee
++option.BLOOM_KNEE_MULT.comment=Width of threshold soft knee relative to threshold
++option.EXPOSURE_BASED_BLOOM=Exposure based bloom
++option.EXPOSURE_BASED_BLOOM.comment=Transition between convolution bloom diffraction spikes at lower exposures and the original Gaussian bloom at higher exposures to simulate changing aperture size. Will force bloom, convolution bloom, and autoexposure
++option.EXPOSURE_BLOOM_TRANSITION=Bloom transition exposure
++option.EXPOSURE_BLOOM_TRANSITION.comment=Exposure where the bloom starts transitioning between convolution and Gaussian. Higher values begin transition in darker environments
+\ No newline at end of file
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/setup.csh 0.8.22-patched/shaders/setup.csh
+--- 0.8.22-orig/shaders/setup.csh	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/setup.csh	2026-05-24 19:46:39.967472300 -0700
+@@ -0,0 +1,5 @@
++#version 430
++
++#define ROW
++
++#include "/Lib/Programs/Setup/KernelFFT_CS.glsl"
+\ No newline at end of file
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/setup1.csh 0.8.22-patched/shaders/setup1.csh
+--- 0.8.22-orig/shaders/setup1.csh	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/setup1.csh	2026-05-24 19:46:16.950890100 -0700
+@@ -0,0 +1,5 @@
++#version 430
++
++#define COL
++
++#include "/Lib/Programs/Setup/KernelFFT_CS.glsl"
+\ No newline at end of file
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/shaders.properties 0.8.22-patched/shaders/shaders.properties
 --- 0.8.22-orig/shaders/shaders.properties	2026-05-10 15:41:03.265972000 -0700
-+++ 0.8.22-patched/shaders/shaders.properties	2026-05-10 15:40:14.000000000 -0700
-@@ -809,7 +809,7 @@
++++ 0.8.22-patched/shaders/shaders.properties	2026-05-26 17:14:57.860570000 -0700
+@@ -60,6 +60,27 @@
+ program.world1/composite90.enabled=WAVEFORM_SCOPE
+ program.world-1/composite90.enabled=WAVEFORM_SCOPE
+ 
++program.setup.enabled=CONV_BLOOM
++program.setup1.enabled=CONV_BLOOM
++program.composite77.enabled=CONV_BLOOM
++program.composite78.enabled=CONV_BLOOM
++program.composite79.enabled=CONV_BLOOM
++program.composite80.enabled=CONV_BLOOM
++
++program.world1/setup.enabled=CONV_BLOOM
++program.world1/setup1.enabled=CONV_BLOOM
++program.world1/composite77.enabled=CONV_BLOOM
++program.world1/composite78.enabled=CONV_BLOOM
++program.world1/composite79.enabled=CONV_BLOOM
++program.world1/composite80.enabled=CONV_BLOOM
++
++program.world-1/setup.enabled=CONV_BLOOM
++program.world-1/setup1.enabled=CONV_BLOOM
++program.world-1/composite77.enabled=CONV_BLOOM
++program.world-1/composite78.enabled=CONV_BLOOM
++program.world-1/composite79.enabled=CONV_BLOOM
++program.world-1/composite80.enabled=CONV_BLOOM
++
+ 
+ 
+ flip.composite10.colortex0=true
+@@ -78,15 +99,15 @@
+ flip.composite40.colortex9=true
+ flip.composite45.colortex9=true
+ flip.composite67.colortex9=true
+-flip.composite80.colortex9=true
++flip.composite81.colortex9=true
+ flip.world1/composite.colortex9=true
+ flip.world1/composite45.colortex9=true
+ flip.world1/composite67.colortex9=true
+-flip.world1/composite80.colortex9=true
++flip.world1/composite81.colortex9=true
+ flip.world-1/composite.colortex9=true
+ flip.world-1/composite45.colortex9=true
+ flip.world-1/composite67.colortex9=true
+-flip.world-1/composite80.colortex9=true
++flip.world-1/composite81.colortex9=true
+ 
+ flip.composite25.colortex10=true
+ flip.composite67.colortex10=true
+@@ -435,6 +456,15 @@
+ #image.img_rippleXY2D = rippleXY2D RG RG32F FLOAT false false 2048 2048
+ #image.img_ripple2D = ripple2D RGBA RGBA8 UNSIGNED_BYTE false false 128 7680
+ 
++customTexture.ker = texture/kernelTex.bin TEXTURE_2D RGBA32F KER_TEX_SIZE KER_TEX_SIZE RGBA FLOAT
++
++image.tmpFFT = tmpFFT_s RGBA RGBA32F FLOAT true false FFT_SIZE FFT_SIZE
++
++image.kerFFT = kerFFT_s RGBA RGBA32F FLOAT false false FFT_SIZE FFT_SIZE
++
++image.imgFFT = imgFFT_s RGBA RGBA32F FLOAT true false FFT_SIZE FFT_SIZE
++
++
+ 
+ texture.noise=texture/noise.png
+ 
+@@ -809,7 +839,8 @@
  screen.SCREENSHOT.columns=1
  	screen.ANIMATION.columns=2
  screen.DEBUG.columns=2
 -
 +screen.PATCHES.columns=1
++	screen.CONVOLUTION_BLOOM.columns=1
  
  
  
-@@ -834,7 +834,7 @@
+@@ -834,7 +865,7 @@
  		[SCREENSHOT]        <empty> \
  		<empty>             <empty> \
  		<empty>             <empty> \
@@ -762,7 +1697,16 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/shaders.prope
  
  screen.PT_VOXEL=PT_VOXEL_RESOLUTION <empty> PT_MIDBLOCK_TEMPFIX PT_FULLBLOCK_VERIFICATION <empty> PT_TAG_DETECTION PT_FULLBLOCK_DETECTION PT_FULLBLOCK_DETECTION_ALPHA_TRACING <empty> VANILLA_EMISSIVE
  
-@@ -1174,7 +1174,7 @@
+@@ -1115,7 +1146,7 @@
+ 							AE_OFFSET                 <empty> \
+ 							<empty>                   MANUAL_EXPOSURE \
+ 							LUMINANCE_WEIGHT_MODE     EV_VALUE \
+-							LUMINANCE_WEIGHT_STRENGTH
++							LUMINANCE_WEIGHT_STRENGTH FLARE_EXPOSURE_COMPENSATION
+ 
+ 	screen.MOTION_BLUR_SETTING= MOTION_BLUR MOTION_BLUR_DITHER MOTION_BLUR_QUALITY <empty> MOTION_BLUR_SUTTER_MODE MOTION_BLUR_SUTTER_ANGLE MOTION_BLUR_SUTTER_SPEED
+ 
+@@ -1174,7 +1205,7 @@
  
  screen.DEBUG =  DEBUG_COUNTER              PT_TRACING_EYE \
  				WHITE_DEBUG_WORLD          DEBUG_IRC \
@@ -771,20 +1715,254 @@ diff -rua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/shaders.prope
  				FTC_OFFSET                 <empty> \
  				CLOUD_SPEED                DEBUG_RTW \
  				<empty>                    <empty> \
-@@ -1183,6 +1183,9 @@
+@@ -1183,6 +1214,19 @@
  				DISABLE_REFLECTION_TEMPORAL_MOTIONWEIGHT
  
  
 +screen.PATCHES =  DYNAMIC_WEATHER     MOON_PHASES \
 +								MOON_PHASE_LIGHTING   NEW_MOON_BRIGHTNESS \
-+								LEAVES_SSS_MULT
++								LEAVES_SSS_MULT       <empty> \
++								[CONVOLUTION_BLOOM]
++	screen.CONVOLUTION_BLOOM = CONV_BLOOM     FFT_SIZE \
++								<empty> \
++	              KER_TEX_SIZE          KERNEL_FRACTION \
++								<empty> \
++								CONV_BLOOM_STRENGTH CONV_BLOOM_STRENGTH_NETHER CONV_BLOOM_STRENGTH_END \
++								BLOOM_THRESHOLD       BLOOM_KNEE_MULT \
++								<empty> \
++								EXPOSURE_BASED_BLOOM  EXPOSURE_BLOOM_TRANSITION \
++								BLOOM
  
  
  
-@@ -1228,4 +1231,5 @@
+@@ -1228,4 +1272,6 @@
  		DH_TEXTURE_NOISE_STEPS DH_TEXTURE_NOISE_STRENGTH \
  		TACZ_ADAPTIVE_EMISSIVE_BRIGHTNESS TACZ_MUZZLE_FLASH_BRIGHTNESS \
  		RENDERING_MODE_SPP RENDERING_MODE_COOLDOWN \
 -		WHITE_DEBUG_WORLD FTC_OFFSET
 +		WHITE_DEBUG_WORLD FTC_OFFSET \
-+		NEW_MOON_BRIGHTNESS LEAVES_SSS_MULT
++		NEW_MOON_BRIGHTNESS LEAVES_SSS_MULT \
++		KER_TEX_SIZE FFT_SIZE KERNEL_FRACTION CONV_BLOOM_STRENGTH CONV_BLOOM_STRENGTH_NETHER CONV_BLOOM_STRENGTH_END BLOOM_THRESHOLD BLOOM_KNEE_MULT EXPOSURE_BLOOM_TRANSITION
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/texture/kernelTex.bin.mcmeta 0.8.22-patched/shaders/texture/kernelTex.bin.mcmeta
+--- 0.8.22-orig/shaders/texture/kernelTex.bin.mcmeta	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/texture/kernelTex.bin.mcmeta	2026-05-23 22:56:26.568689900 -0700
+@@ -0,0 +1,6 @@
++{
++  "texture": {
++    "blur": true,
++    "clamp": false
++  }
++}
+\ No newline at end of file
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/world-1/composite77.csh 0.8.22-patched/shaders/world-1/composite77.csh
+--- 0.8.22-orig/shaders/world-1/composite77.csh	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/world-1/composite77.csh	2026-05-23 23:30:51.348297000 -0700
+@@ -0,0 +1,5 @@
++#version 430
++
++#define ROW
++
++#include "/Lib/Programs/Composite/ImageFFT_CS.glsl"
+\ No newline at end of file
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/world-1/composite78.csh 0.8.22-patched/shaders/world-1/composite78.csh
+--- 0.8.22-orig/shaders/world-1/composite78.csh	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/world-1/composite78.csh	2026-05-23 23:30:53.565218100 -0700
+@@ -0,0 +1,5 @@
++#version 430
++
++#define COL
++
++#include "/Lib/Programs/Composite/ImageFFT_CS.glsl"
+\ No newline at end of file
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/world-1/composite79.csh 0.8.22-patched/shaders/world-1/composite79.csh
+--- 0.8.22-orig/shaders/world-1/composite79.csh	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/world-1/composite79.csh	2026-05-23 23:30:56.274458500 -0700
+@@ -0,0 +1,5 @@
++#version 430
++
++#define ROW
++
++#include "/Lib/Programs/Composite/ImageConvolveIFFT_CS.glsl"
+\ No newline at end of file
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/world-1/composite80.csh 0.8.22-patched/shaders/world-1/composite80.csh
+--- 0.8.22-orig/shaders/world-1/composite80.csh	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/world-1/composite80.csh	2026-05-23 23:30:58.265386600 -0700
+@@ -0,0 +1,5 @@
++#version 430
++
++#define COL
++
++#include "/Lib/Programs/Composite/ImageConvolveIFFT_CS.glsl"
+\ No newline at end of file
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/world-1/composite80.fsh 0.8.22-patched/shaders/world-1/composite80.fsh
+--- 0.8.22-orig/shaders/world-1/composite80.fsh	2026-05-10 15:41:07.516792500 -0700
++++ 0.8.22-patched/shaders/world-1/composite80.fsh	1969-12-31 16:00:00.000000000 -0800
+@@ -1,8 +0,0 @@
+-#version 430
+-
+-
+-#define DIMENSION_NETHER
+-#define PROGRAM_FINAL_0
+-
+-
+-#include "/Lib/Programs/Final_FS.glsl"
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/world-1/composite80.vsh 0.8.22-patched/shaders/world-1/composite80.vsh
+--- 0.8.22-orig/shaders/world-1/composite80.vsh	2026-05-10 15:41:07.531313800 -0700
++++ 0.8.22-patched/shaders/world-1/composite80.vsh	1969-12-31 16:00:00.000000000 -0800
+@@ -1,7 +0,0 @@
+-#version 430
+-
+-
+-#define DIMENSION_NETHER
+-
+-
+-#include "/Lib/Programs/Composite/PixelData_VS.glsl"
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/world-1/composite81.fsh 0.8.22-patched/shaders/world-1/composite81.fsh
+--- 0.8.22-orig/shaders/world-1/composite81.fsh	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/world-1/composite81.fsh	2026-05-10 18:37:20.000000000 -0700
+@@ -0,0 +1,8 @@
++#version 430
++
++
++#define DIMENSION_NETHER
++#define PROGRAM_FINAL_0
++
++
++#include "/Lib/Programs/Final_FS.glsl"
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/world-1/composite81.vsh 0.8.22-patched/shaders/world-1/composite81.vsh
+--- 0.8.22-orig/shaders/world-1/composite81.vsh	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/world-1/composite81.vsh	2026-05-10 18:37:20.000000000 -0700
+@@ -0,0 +1,7 @@
++#version 430
++
++
++#define DIMENSION_NETHER
++
++
++#include "/Lib/Programs/Composite/PixelData_VS.glsl"
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/world-1/setup.csh 0.8.22-patched/shaders/world-1/setup.csh
+--- 0.8.22-orig/shaders/world-1/setup.csh	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/world-1/setup.csh	2026-05-24 19:46:51.653385800 -0700
+@@ -0,0 +1,5 @@
++#version 430
++
++#define ROW
++
++#include "/Lib/Programs/Setup/KernelFFT_CS.glsl"
+\ No newline at end of file
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/world-1/setup1.csh 0.8.22-patched/shaders/world-1/setup1.csh
+--- 0.8.22-orig/shaders/world-1/setup1.csh	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/world-1/setup1.csh	2026-05-24 19:46:21.734050300 -0700
+@@ -0,0 +1,5 @@
++#version 430
++
++#define COL
++
++#include "/Lib/Programs/Setup/KernelFFT_CS.glsl"
+\ No newline at end of file
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/world1/composite77.csh 0.8.22-patched/shaders/world1/composite77.csh
+--- 0.8.22-orig/shaders/world1/composite77.csh	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/world1/composite77.csh	2026-05-23 23:31:04.364655000 -0700
+@@ -0,0 +1,5 @@
++#version 430
++
++#define ROW
++
++#include "/Lib/Programs/Composite/ImageFFT_CS.glsl"
+\ No newline at end of file
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/world1/composite78.csh 0.8.22-patched/shaders/world1/composite78.csh
+--- 0.8.22-orig/shaders/world1/composite78.csh	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/world1/composite78.csh	2026-05-23 23:31:06.010123200 -0700
+@@ -0,0 +1,5 @@
++#version 430
++
++#define COL
++
++#include "/Lib/Programs/Composite/ImageFFT_CS.glsl"
+\ No newline at end of file
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/world1/composite79.csh 0.8.22-patched/shaders/world1/composite79.csh
+--- 0.8.22-orig/shaders/world1/composite79.csh	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/world1/composite79.csh	2026-05-23 23:31:10.295136700 -0700
+@@ -0,0 +1,5 @@
++#version 430
++
++#define ROW
++
++#include "/Lib/Programs/Composite/ImageConvolveIFFT_CS.glsl"
+\ No newline at end of file
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/world1/composite80.csh 0.8.22-patched/shaders/world1/composite80.csh
+--- 0.8.22-orig/shaders/world1/composite80.csh	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/world1/composite80.csh	2026-05-23 23:31:15.012989100 -0700
+@@ -0,0 +1,5 @@
++#version 430
++
++#define COL
++
++#include "/Lib/Programs/Composite/ImageConvolveIFFT_CS.glsl"
+\ No newline at end of file
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/world1/composite80.fsh 0.8.22-patched/shaders/world1/composite80.fsh
+--- 0.8.22-orig/shaders/world1/composite80.fsh	2026-05-10 15:41:09.574095800 -0700
++++ 0.8.22-patched/shaders/world1/composite80.fsh	1969-12-31 16:00:00.000000000 -0800
+@@ -1,8 +0,0 @@
+-#version 430
+-
+-
+-#define DIMENSION_END
+-#define PROGRAM_FINAL_0
+-
+-
+-#include "/Lib/Programs/Final_FS.glsl"
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/world1/composite80.vsh 0.8.22-patched/shaders/world1/composite80.vsh
+--- 0.8.22-orig/shaders/world1/composite80.vsh	2026-05-10 15:41:09.587795100 -0700
++++ 0.8.22-patched/shaders/world1/composite80.vsh	1969-12-31 16:00:00.000000000 -0800
+@@ -1,7 +0,0 @@
+-#version 430
+-
+-
+-#define DIMENSION_END
+-
+-
+-#include "/Lib/Programs/Composite/PixelData_VS.glsl"
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/world1/composite81.fsh 0.8.22-patched/shaders/world1/composite81.fsh
+--- 0.8.22-orig/shaders/world1/composite81.fsh	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/world1/composite81.fsh	2026-05-10 18:37:20.000000000 -0700
+@@ -0,0 +1,8 @@
++#version 430
++
++
++#define DIMENSION_END
++#define PROGRAM_FINAL_0
++
++
++#include "/Lib/Programs/Final_FS.glsl"
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/world1/composite81.vsh 0.8.22-patched/shaders/world1/composite81.vsh
+--- 0.8.22-orig/shaders/world1/composite81.vsh	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/world1/composite81.vsh	2026-05-10 18:37:20.000000000 -0700
+@@ -0,0 +1,7 @@
++#version 430
++
++
++#define DIMENSION_END
++
++
++#include "/Lib/Programs/Composite/PixelData_VS.glsl"
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/world1/setup.csh 0.8.22-patched/shaders/world1/setup.csh
+--- 0.8.22-orig/shaders/world1/setup.csh	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/world1/setup.csh	2026-05-24 19:46:28.272019900 -0700
+@@ -0,0 +1,5 @@
++#version 430
++
++#define ROW
++
++#include "/Lib/Programs/Setup/KernelFFT_CS.glsl"
+\ No newline at end of file
+diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/world1/setup1.csh 0.8.22-patched/shaders/world1/setup1.csh
+--- 0.8.22-orig/shaders/world1/setup1.csh	1969-12-31 16:00:00.000000000 -0800
++++ 0.8.22-patched/shaders/world1/setup1.csh	2026-05-24 19:46:31.572278500 -0700
+@@ -0,0 +1,5 @@
++#version 430
++
++#define COL
++
++#include "/Lib/Programs/Setup/KernelFFT_CS.glsl"
+\ No newline at end of file

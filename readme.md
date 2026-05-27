@@ -8,6 +8,10 @@
 
 ```python shader-patch.py "iterationRP Alpha (ver).zip" "itrp-patch-(ver).diff" "(ver)-patched.zip"```
 
+> ### **Important for the convolution bloom release:** Download the kernelTex.bin file and drop it into shaders/texture in the zip file. 
+> Or you can **generate your own bloom kernels [here](https://huj31415.github.io/fft2d-webgpu/)!** (Requires WebGPU support in your browser, and **use the normalize option**)
+> Without kernelTex there will be nothing to convolve!
+
 6. Move the patched shader output to your shaderpacks folder and enjoy!
 
 
@@ -16,7 +20,23 @@ Now uses gnu diff
 
 ```diff -rua --strip-trailing-cr "original-unzipped-folder" "patched-unzipped-folder" > patch.diff```
 
+### Technical details of the convolution bloom implementation
+
+* Uses radix-4 packed RGBA Cooley-Tukey FFT for size 1024 with radix-2 prepass for non-power-of-4 (2048)
+  * All channels are independent so dispersed (rainbow diffraction) kernels are supported
+* Directly samples, filters, and complex multiplies scene and kernel textures as inputs to FFT/IFFT passes without writing to intermediate textures
+* 2 setup passes run once - kernel row and column FFT
+* 4 extra passes per frame
+  1. Sample and filter scene and do row FFT
+  2. Column FFT
+  3. Unpack channels, complex multiply with kernel spectrum, repack channels, and do row IFFT
+  4. Column IFFT
+* In my testing the performance impact was &le;5% with Nsight profiler overhead
+
 ## Changelog
+### v2026.5.26 Convolution bloom release
+* Add convolution bloom support. **Ver. 0.8.22 Only**
+
 ### v2026.5.10
 * Add support for IterationRP Alpha 0.8.22
 * Fix clouds rendering behind terrain based on [Erykuuu's work](https://github.com/Erykuuu/IterationRp-SoczystaWolowina-edits) (currently 0.8.22 only)
