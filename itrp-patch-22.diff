@@ -1,7 +1,9 @@
 diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/BasicFunctions/FFT.glsl 0.8.22-patched/shaders/Lib/BasicFunctions/FFT.glsl
 --- 0.8.22-orig/shaders/Lib/BasicFunctions/FFT.glsl	1969-12-31 16:00:00.000000000 -0800
-+++ 0.8.22-patched/shaders/Lib/BasicFunctions/FFT.glsl	2026-05-26 16:22:57.514629800 -0700
-@@ -0,0 +1,151 @@
++++ 0.8.22-patched/shaders/Lib/BasicFunctions/FFT.glsl	2026-05-26 19:07:18.131237500 -0700
+@@ -0,0 +1,153 @@
++// by huj31415
++
 +#define PI 3.1415926535
 +#define TAU 6.283185307
 +
@@ -645,8 +647,10 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs
  						/*
 diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Composite/ImageConvolveIFFT_CS.glsl 0.8.22-patched/shaders/Lib/Programs/Composite/ImageConvolveIFFT_CS.glsl
 --- 0.8.22-orig/shaders/Lib/Programs/Composite/ImageConvolveIFFT_CS.glsl	1969-12-31 16:00:00.000000000 -0800
-+++ 0.8.22-patched/shaders/Lib/Programs/Composite/ImageConvolveIFFT_CS.glsl	2026-05-26 16:38:53.475590500 -0700
-@@ -0,0 +1,103 @@
++++ 0.8.22-patched/shaders/Lib/Programs/Composite/ImageConvolveIFFT_CS.glsl	2026-05-26 19:07:25.859702700 -0700
+@@ -0,0 +1,105 @@
++// by huj31415
++
 +// unpack image and kernel spectra and complex multiply
 +// ifft and save to image
 +
@@ -753,8 +757,10 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs
 \ No newline at end of file
 diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Composite/ImageFFT_CS.glsl 0.8.22-patched/shaders/Lib/Programs/Composite/ImageFFT_CS.glsl
 --- 0.8.22-orig/shaders/Lib/Programs/Composite/ImageFFT_CS.glsl	1969-12-31 16:00:00.000000000 -0800
-+++ 0.8.22-patched/shaders/Lib/Programs/Composite/ImageFFT_CS.glsl	2026-05-26 16:38:59.889197900 -0700
-@@ -0,0 +1,93 @@
++++ 0.8.22-patched/shaders/Lib/Programs/Composite/ImageFFT_CS.glsl	2026-05-26 19:07:28.775038300 -0700
+@@ -0,0 +1,95 @@
++// by huj31415
++
 +// run once per frame
 +// compute FFT of image and write to image
 +
@@ -1101,7 +1107,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs
  	#endif
 diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Final_FS.glsl 0.8.22-patched/shaders/Lib/Programs/Final_FS.glsl
 --- 0.8.22-orig/shaders/Lib/Programs/Final_FS.glsl	2026-05-10 15:41:04.343945100 -0700
-+++ 0.8.22-patched/shaders/Lib/Programs/Final_FS.glsl	2026-05-26 16:51:36.905529700 -0700
++++ 0.8.22-patched/shaders/Lib/Programs/Final_FS.glsl	2026-05-26 19:25:29.519861800 -0700
 @@ -316,6 +316,8 @@
  
  
@@ -1123,7 +1129,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs
  				#endif
  				#endif
  
-@@ -597,6 +602,29 @@
+@@ -597,6 +602,44 @@
  
  uniform sampler2D pixelData2D;
  //*/
@@ -1150,41 +1156,64 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs
 +	const int ConvBloomStrength = (1 << CONV_BLOOM_STRENGTH_NETHER);
 +#endif
 +
++#ifdef CAP_LUMINANCE
++  const float maxLuminance = float(1 << CAP_LUMINANCE);
++#endif
++
++// soft knee thresholding
++vec3 softKnee(vec3 color) {
++  float l = Luminance(color.rgb);
++  float x = max(0, l - BLOOM_THRESHOLD + BLOOM_KNEE);
++  color *= mix(x * x / (4 * BLOOM_KNEE), max(0, l - BLOOM_THRESHOLD), float(x > BLOOM_THRESHOLD + BLOOM_KNEE)) / max(l, 1e-6);
++  #ifdef CAP_LUMINANCE
++    color *= min(1.0, maxLuminance / l);
++  #endif
++  return color;
++}
++
  /////////////////////////MAIN//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
  /////////////////////////MAIN//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
  void main(){
-@@ -625,16 +653,22 @@
+@@ -625,16 +668,31 @@
  		if (hideGUI > 0) color = color * 0.5 + texelFetch(FBTEX_ALBEDO, texelCoord, 0).rgb * 0.5;
  
  	#else
 -
 -		#ifdef BLOOM
 -			color = MergeBloom(color, 1.0 - data1.a);
--		#endif
++		#ifdef DEBUG_CONV_BLOOM
++			color = getConvBloom(texelCoord);
++		#else
++			#ifdef DEBUG_THRESHOLD
++				color = softKnee(color * GetExposureValue());
++			#endif
+ 		#endif
 -
 -		#ifdef VIGNETTE
 -			color *= Vignette(texCoord, VIGNETTE_FALLOFF, VIGNETTE_ROUNDNESS);
-+		float expValue = GetExposureValue();
-+		#if defined EXPOSURE_BASED_BLOOM && defined BLOOM
-+		// mix between normal bloom and convolution bloom to simulate aperture adjusting based on brightness
-+		 	color = mix(
-+				MergeBloom(color, 1.0 - data1.a) * expValue,
-+				color * expValue + 2 * ConvBloomStrength * getConvBloom(texelCoord),
-+				min(1.0, EXPOSURE_BLOOM_TRANSITION / expValue)
-+			); // 256, 512
-+		#elif defined BLOOM && !defined CONV_BLOOM
-+			color = MergeBloom(color, 1.0 - data1.a) * expValue;
-+		#elif defined CONV_BLOOM
-+			color = color * expValue + ConvBloomStrength * getConvBloom(texelCoord);
-+		#else
-+			color *= expValue;
++		#if !defined DEBUG_CONV_BLOOM && !defined DEBUG_THRESHOLD
++			float expValue = GetExposureValue();
++			#if defined EXPOSURE_BASED_BLOOM && defined BLOOM
++			// mix between normal bloom and convolution bloom to simulate aperture adjusting based on brightness
++				color = mix(
++					MergeBloom(color, 1.0 - data1.a) * expValue,
++					color * expValue + 2 * ConvBloomStrength * getConvBloom(texelCoord),
++					min(1.0, EXPOSURE_BLOOM_TRANSITION / expValue)
++				); // 256, 512
++			#elif defined BLOOM && !defined CONV_BLOOM
++				color = MergeBloom(color, 1.0 - data1.a) * expValue;
++			#elif defined CONV_BLOOM
++				color = color * expValue + ConvBloomStrength * getConvBloom(texelCoord);
++			#else
++				color *= expValue;
++			#endif
  		#endif
  
 -		color *= GetExposureValue();
  
  		color = TONEMAP_OPERATOR(color);
  
-@@ -643,6 +677,10 @@
+@@ -643,6 +701,10 @@
  		#ifdef ADVANCED_COLOR
  			color = ColorGrading(color);
  		#endif
@@ -1195,7 +1224,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs
  /*
  		#ifdef HAS_COLORWHEEL
  			#ifdef SUPER_RESOLUTION
-@@ -1292,6 +1330,19 @@
+@@ -1292,6 +1354,19 @@
  
  	//if (texelCoord.x < 400) color = vec3(1.3);
  
@@ -1239,8 +1268,10 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs
  	vec3 waterNormal = tbn[2];
 diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Setup/KernelFFT_CS.glsl 0.8.22-patched/shaders/Lib/Programs/Setup/KernelFFT_CS.glsl
 --- 0.8.22-orig/shaders/Lib/Programs/Setup/KernelFFT_CS.glsl	1969-12-31 16:00:00.000000000 -0800
-+++ 0.8.22-patched/shaders/Lib/Programs/Setup/KernelFFT_CS.glsl	2026-05-26 16:39:07.722604400 -0700
-@@ -0,0 +1,79 @@
++++ 0.8.22-patched/shaders/Lib/Programs/Setup/KernelFFT_CS.glsl	2026-05-26 19:07:36.237473800 -0700
+@@ -0,0 +1,81 @@
++// by huj31415
++
 +// run once on shader load or window resize
 +// compute FFT of diffraction kernel and write to image
 +
@@ -1323,7 +1354,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs
 \ No newline at end of file
 diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Settings.glsl 0.8.22-patched/shaders/Lib/Settings.glsl
 --- 0.8.22-orig/shaders/Lib/Settings.glsl	2026-05-10 15:41:03.462110000 -0700
-+++ 0.8.22-patched/shaders/Lib/Settings.glsl	2026-05-26 17:11:25.522761700 -0700
++++ 0.8.22-patched/shaders/Lib/Settings.glsl	2026-05-26 19:22:34.719880800 -0700
 @@ -570,7 +570,7 @@
  
  //Volumetric Fog------------------------
@@ -1359,7 +1390,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Settings
    //#define DEBUG_COUNTER
    //#define DISABLE_NIGHTVISION
    //#define DISABLE_BLINDNESS_DARKNESS
-@@ -814,4 +817,41 @@
+@@ -814,4 +817,43 @@
    //#define DEBUG_IRC
    //#define DISABLE_REFLECTION_TEMPORAL_MOTIONWEIGHT
  
@@ -1386,10 +1417,12 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Settings
 +	const int BLOOM_KNEE = int(BLOOM_THRESHOLD * BLOOM_KNEE_MULT); // [0.0 0.2 0.4 0.8 1.0 1.5 2.0 5.0 10.0]
 +	#define CONV_BLOOM
 +	#define CONV_BLOOM_STRENGTH 5 // [0 1 2 3 4 5 6 7 8 9 10 11 12]
-+	#define CONV_BLOOM_STRENGTH_NETHER 5 // [0 1 2 3 4 5 6 7 8 9 10 11 12]
++	#define CONV_BLOOM_STRENGTH_NETHER 4 // [0 1 2 3 4 5 6 7 8 9 10 11 12]
 +	#define CONV_BLOOM_STRENGTH_END 2 // [0 1 2 3 4 5 6 7 8 9 10 11 12]
 +	#define EXPOSURE_BASED_BLOOM
 +	#define EXPOSURE_BLOOM_TRANSITION 10 // [1 5 10 20 50 100 500 1000 5000 10000]
++	//#define DEBUG_THRESHOLD
++	//#define DEBUG_CONV_BLOOM
 +
 +// require bloom, autoexposure, convolution bloom when enabling exposure based bloom for pass toggling
 +#ifdef EXPOSURE_BASED_BLOOM
@@ -1550,8 +1583,8 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/composite81.
 +#include "/Lib/Programs/Composite/PixelData_VS.glsl"
 diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/lang/en_us.lang 0.8.22-patched/shaders/lang/en_us.lang
 --- 0.8.22-orig/shaders/lang/en_us.lang	2026-05-10 15:41:03.397818800 -0700
-+++ 0.8.22-patched/shaders/lang/en_us.lang	2026-05-26 16:51:11.176952000 -0700
-@@ -779,3 +779,39 @@
++++ 0.8.22-patched/shaders/lang/en_us.lang	2026-05-26 19:27:38.002142400 -0700
+@@ -779,3 +779,41 @@
  
  
  screen.DEBUG=§7Debug
@@ -1591,6 +1624,8 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/lang/en_us.l
 +option.EXPOSURE_BASED_BLOOM.comment=Transition between convolution bloom diffraction spikes at lower exposures and the original Gaussian bloom at higher exposures to simulate changing aperture size. Will force bloom, convolution bloom, and autoexposure
 +option.EXPOSURE_BLOOM_TRANSITION=Bloom transition exposure
 +option.EXPOSURE_BLOOM_TRANSITION.comment=Exposure where the bloom starts transitioning between convolution and Gaussian. Higher values begin transition in darker environments
++option.DEBUG_THRESHOLD=DEBUG Thresholded scene
++option.DEBUG_CONV_BLOOM=DEBUG Convolved image
 \ No newline at end of file
 diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/setup.csh 0.8.22-patched/shaders/setup.csh
 --- 0.8.22-orig/shaders/setup.csh	1969-12-31 16:00:00.000000000 -0800
@@ -1614,7 +1649,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/setup1.csh 0
 \ No newline at end of file
 diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/shaders.properties 0.8.22-patched/shaders/shaders.properties
 --- 0.8.22-orig/shaders/shaders.properties	2026-05-10 15:41:03.265972000 -0700
-+++ 0.8.22-patched/shaders/shaders.properties	2026-05-26 17:14:57.860570000 -0700
++++ 0.8.22-patched/shaders/shaders.properties	2026-05-26 19:26:26.757342000 -0700
 @@ -60,6 +60,27 @@
  program.world1/composite90.enabled=WAVEFORM_SCOPE
  program.world-1/composite90.enabled=WAVEFORM_SCOPE
@@ -1715,7 +1750,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/shaders.prop
  				FTC_OFFSET                 <empty> \
  				CLOUD_SPEED                DEBUG_RTW \
  				<empty>                    <empty> \
-@@ -1183,6 +1214,19 @@
+@@ -1183,6 +1214,21 @@
  				DISABLE_REFLECTION_TEMPORAL_MOTIONWEIGHT
  
  
@@ -1731,11 +1766,13 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/shaders.prop
 +								BLOOM_THRESHOLD       BLOOM_KNEE_MULT \
 +								<empty> \
 +								EXPOSURE_BASED_BLOOM  EXPOSURE_BLOOM_TRANSITION \
-+								BLOOM
++								BLOOM \
++								<empty> \
++								DEBUG_THRESHOLD       DEBUG_CONV_BLOOM
  
  
  
-@@ -1228,4 +1272,6 @@
+@@ -1228,4 +1274,6 @@
  		DH_TEXTURE_NOISE_STEPS DH_TEXTURE_NOISE_STRENGTH \
  		TACZ_ADAPTIVE_EMISSIVE_BRIGHTNESS TACZ_MUZZLE_FLASH_BRIGHTNESS \
  		RENDERING_MODE_SPP RENDERING_MODE_COOLDOWN \
