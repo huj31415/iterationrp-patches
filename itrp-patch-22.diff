@@ -757,7 +757,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs
 \ No newline at end of file
 diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Composite/ImageFFT_CS.glsl 0.8.22-patched/shaders/Lib/Programs/Composite/ImageFFT_CS.glsl
 --- 0.8.22-orig/shaders/Lib/Programs/Composite/ImageFFT_CS.glsl	1969-12-31 16:00:00.000000000 -0800
-+++ 0.8.22-patched/shaders/Lib/Programs/Composite/ImageFFT_CS.glsl	2026-05-26 19:07:28.775038300 -0700
++++ 0.8.22-patched/shaders/Lib/Programs/Composite/ImageFFT_CS.glsl	2026-05-28 14:31:55.413587600 -0700
 @@ -0,0 +1,95 @@
 +// by huj31415
 +
@@ -783,7 +783,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs
 +	return texelFetch(pixelData2D, ivec2(PIXELDATA_EXPOSURE, 0), 0).y;
 +}
 +
-+#ifdef CAP_LUMINANCE
++#if CAP_LUMINANCE > -1
 +  const float maxLuminance = float(1 << CAP_LUMINANCE);
 +#endif
 +
@@ -792,7 +792,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs
 +  float l = Luminance(color.rgb);
 +  float x = max(0, l - BLOOM_THRESHOLD + BLOOM_KNEE);
 +  color.rgb *= mix(x * x / (4 * BLOOM_KNEE), max(0, l - BLOOM_THRESHOLD), float(x > BLOOM_THRESHOLD + BLOOM_KNEE)) / max(l, 1e-6);
-+  #ifdef CAP_LUMINANCE
++  #if CAP_LUMINANCE > -1
 +    color *= min(1.0, maxLuminance / l);
 +  #endif
 +  return color;
@@ -1107,7 +1107,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs
  	#endif
 diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs/Final_FS.glsl 0.8.22-patched/shaders/Lib/Programs/Final_FS.glsl
 --- 0.8.22-orig/shaders/Lib/Programs/Final_FS.glsl	2026-05-10 15:41:04.343945100 -0700
-+++ 0.8.22-patched/shaders/Lib/Programs/Final_FS.glsl	2026-05-26 19:25:29.519861800 -0700
++++ 0.8.22-patched/shaders/Lib/Programs/Final_FS.glsl	2026-05-28 14:31:41.833235100 -0700
 @@ -316,6 +316,8 @@
  
  
@@ -1156,7 +1156,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs
 +	const int ConvBloomStrength = (1 << CONV_BLOOM_STRENGTH_NETHER);
 +#endif
 +
-+#ifdef CAP_LUMINANCE
++#if CAP_LUMINANCE > -1
 +  const float maxLuminance = float(1 << CAP_LUMINANCE);
 +#endif
 +
@@ -1165,7 +1165,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs
 +  float l = Luminance(color.rgb);
 +  float x = max(0, l - BLOOM_THRESHOLD + BLOOM_KNEE);
 +  color *= mix(x * x / (4 * BLOOM_KNEE), max(0, l - BLOOM_THRESHOLD), float(x > BLOOM_THRESHOLD + BLOOM_KNEE)) / max(l, 1e-6);
-+  #ifdef CAP_LUMINANCE
++  #if CAP_LUMINANCE > -1
 +    color *= min(1.0, maxLuminance / l);
 +  #endif
 +  return color;
@@ -1354,7 +1354,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Programs
 \ No newline at end of file
 diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Settings.glsl 0.8.22-patched/shaders/Lib/Settings.glsl
 --- 0.8.22-orig/shaders/Lib/Settings.glsl	2026-05-10 15:41:03.462110000 -0700
-+++ 0.8.22-patched/shaders/Lib/Settings.glsl	2026-05-26 19:22:34.719880800 -0700
++++ 0.8.22-patched/shaders/Lib/Settings.glsl	2026-05-28 14:36:13.865134300 -0700
 @@ -570,7 +570,7 @@
  
  //Volumetric Fog------------------------
@@ -1413,7 +1413,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/Lib/Settings
 +
 +	#define BLOOM_THRESHOLD 10.0 // [0.1 1.0 2.0 3.0 5.0 7.0 10.0 15.0 20.0]
 +	#define BLOOM_KNEE_MULT 0.5 // [0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0]
-+	#define CAP_LUMINANCE 5 // [-1 0 1 2 3 4 5 6 7 8 9 10]
++	#define CAP_LUMINANCE 5 // [-1 3 4 5 6 7 8 9 10]
 +	const int BLOOM_KNEE = int(BLOOM_THRESHOLD * BLOOM_KNEE_MULT); // [0.0 0.2 0.4 0.8 1.0 1.5 2.0 5.0 10.0]
 +	#define CONV_BLOOM
 +	#define CONV_BLOOM_STRENGTH 5 // [0 1 2 3 4 5 6 7 8 9 10 11 12]
@@ -1649,7 +1649,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/setup1.csh 0
 \ No newline at end of file
 diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/shaders.properties 0.8.22-patched/shaders/shaders.properties
 --- 0.8.22-orig/shaders/shaders.properties	2026-05-10 15:41:03.265972000 -0700
-+++ 0.8.22-patched/shaders/shaders.properties	2026-05-26 19:26:26.757342000 -0700
++++ 0.8.22-patched/shaders/shaders.properties	2026-05-28 14:37:04.151967200 -0700
 @@ -60,6 +60,27 @@
  program.world1/composite90.enabled=WAVEFORM_SCOPE
  program.world-1/composite90.enabled=WAVEFORM_SCOPE
@@ -1763,7 +1763,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/shaders.prop
 +	              KER_TEX_SIZE          KERNEL_FRACTION \
 +								<empty> \
 +								CONV_BLOOM_STRENGTH CONV_BLOOM_STRENGTH_NETHER CONV_BLOOM_STRENGTH_END \
-+								BLOOM_THRESHOLD       BLOOM_KNEE_MULT \
++								BLOOM_THRESHOLD       BLOOM_KNEE_MULT  CAP_LUMINANCE \
 +								<empty> \
 +								EXPOSURE_BASED_BLOOM  EXPOSURE_BLOOM_TRANSITION \
 +								BLOOM \
@@ -1779,7 +1779,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/shaders.prop
 -		WHITE_DEBUG_WORLD FTC_OFFSET
 +		WHITE_DEBUG_WORLD FTC_OFFSET \
 +		NEW_MOON_BRIGHTNESS LEAVES_SSS_MULT \
-+		KER_TEX_SIZE FFT_SIZE KERNEL_FRACTION CONV_BLOOM_STRENGTH CONV_BLOOM_STRENGTH_NETHER CONV_BLOOM_STRENGTH_END BLOOM_THRESHOLD BLOOM_KNEE_MULT EXPOSURE_BLOOM_TRANSITION
++		KER_TEX_SIZE FFT_SIZE KERNEL_FRACTION CONV_BLOOM_STRENGTH CONV_BLOOM_STRENGTH_NETHER CONV_BLOOM_STRENGTH_END BLOOM_THRESHOLD BLOOM_KNEE_MULT CAP_LUMINANCE EXPOSURE_BLOOM_TRANSITION
 diff -Nrua --strip-trailing-cr '--exclude=.git' 0.8.22-orig/shaders/texture/kernelTex.bin.mcmeta 0.8.22-patched/shaders/texture/kernelTex.bin.mcmeta
 --- 0.8.22-orig/shaders/texture/kernelTex.bin.mcmeta	1969-12-31 16:00:00.000000000 -0800
 +++ 0.8.22-patched/shaders/texture/kernelTex.bin.mcmeta	2026-05-23 22:56:26.568689900 -0700
