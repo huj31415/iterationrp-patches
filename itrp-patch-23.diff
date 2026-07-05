@@ -2061,7 +2061,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.23-orig/
  // ((9 - 69^(1/2))^(1/3) + (9 + 69^(1/2))^(1/3)) / (2^(1/3) * 3^(2/3))
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.23-orig/shaders/Lib/clouds/Common.glsl 0.8.23-cloud/shaders/Lib/clouds/Common.glsl
 --- 0.8.23-orig/shaders/Lib/clouds/Common.glsl	1969-12-31 19:00:00.000000000 -0500
-+++ 0.8.23-cloud/shaders/Lib/clouds/Common.glsl	2026-07-04 21:38:17.931584800 -0400
++++ 0.8.23-cloud/shaders/Lib/clouds/Common.glsl	2026-07-05 13:27:02.536125800 -0400
 @@ -0,0 +1,430 @@
 +#if !defined INCLUDE_CLOUDS_COMMON
 +#define INCLUDE_CLOUDS_COMMON
@@ -2155,9 +2155,9 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.23-orig/
 +
 +#include "/Lib/clouds/ssbo.glsl"
 +
-+vec2 weatherHash(vec2 input)
++vec2 weatherHash(vec2 seed)
 +{
-+	uvec2 state = floatBitsToUint(input + 1) * 747796405u + 2891336453u;
++	uvec2 state = floatBitsToUint(seed + 1) * 747796405u + 2891336453u;
 +	uvec2 word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
 +	vec2 x = vec2((word >> 22u) ^ word) * (1.0 / float(0xFFFFFFFFu));
 +	return x - COVERAGE_BIAS * x * (x - 1);
@@ -2169,7 +2169,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.23-orig/
 +	// daily cumulus cloud coverage centered on CLOUD_CLEAR_COVERY
 +	// set max coverage to 1
 +	// const float coverDeviation = (1 - CLOUD_CLEAR_COVERY);
-+	const uint weatherSeed = worldDay + 4;
++	uint weatherSeed = worldDay + 4;
 +	vec2 weather = weatherHash(vec2(weatherSeed, weatherSeed + 1));// * 2.0 - 1.0;
 +	float weatherBlend = smoothstep(0, 1, worldTime / 24000.0);
 +	// blend coverage between days centered around clear coverage setting
@@ -4025,7 +4025,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.23-orig/
 +}
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.23-orig/shaders/Lib/clouds/setup/randomizeClouds_CS.glsl 0.8.23-cloud/shaders/Lib/clouds/setup/randomizeClouds_CS.glsl
 --- 0.8.23-orig/shaders/Lib/clouds/setup/randomizeClouds_CS.glsl	1969-12-31 19:00:00.000000000 -0500
-+++ 0.8.23-cloud/shaders/Lib/clouds/setup/randomizeClouds_CS.glsl	2026-06-15 23:28:26.740950800 -0400
++++ 0.8.23-cloud/shaders/Lib/clouds/setup/randomizeClouds_CS.glsl	2026-07-05 13:27:50.926468300 -0400
 @@ -0,0 +1,20 @@
 +
 +layout (local_size_x = 1, local_size_y = 1) in;
@@ -4036,9 +4036,9 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.23-orig/
 +uniform ivec3 currentTime;
 +uniform ivec2 currentYearTime;
 +
-+uint pcg_hash(uint input)
++uint pcg_hash(uint seed)
 +{
-+	uint state = input * 747796405u + 2891336453u;
++	uint state = seed * 747796405u + 2891336453u;
 +	uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
 +	return (word >> 22u) ^ word;
 +}
