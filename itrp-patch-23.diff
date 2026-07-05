@@ -3627,8 +3627,8 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.23-orig/
 +}
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.23-orig/shaders/Lib/clouds/begin/GlobalStorage.comp 0.8.23-cloud/shaders/Lib/clouds/begin/GlobalStorage.comp
 --- 0.8.23-orig/shaders/Lib/clouds/begin/GlobalStorage.comp	1969-12-31 19:00:00.000000000 -0500
-+++ 0.8.23-cloud/shaders/Lib/clouds/begin/GlobalStorage.comp	2026-06-21 14:34:46.423214600 -0400
-@@ -0,0 +1,69 @@
++++ 0.8.23-cloud/shaders/Lib/clouds/begin/GlobalStorage.comp	2026-07-05 18:53:36.235564200 -0400
+@@ -0,0 +1,64 @@
 +/*
 +--------------------------------------------------------------------------------
 +
@@ -3656,26 +3656,23 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.23-orig/
 +
 +#define SSBO_DECLARED_TYPE restrict
 +#include "/Lib/clouds/Common.glsl"
-+mat4 BuildOrthoMat(float width, float height, float near, float far) {
-+	float rw = rcp(width);
-+	float rh = rcp(height);
-+	float rd = rcp(near - far);
 +
-+	return mat4(
-+		2.0 * rw, 0.0, 0.0, 0.0,
-+		0.0, 2.0 * rh, 0.0, 0.0,
-+		0.0, 0.0, -2.0 * rd, -(near + far) * rd,
-+		0.0, 0.0, 0.0, 1.0
-+	);
-+}
-+mat4 BuildInvOrthoMat(float width, float height, float near, float far) {
-+	return mat4(
-+		0.5 * width, 0.0, 0.0, 0.0,
-+		0.0, 0.5 * height, 0.0, 0.0,
-+		0.0, 0.0, -0.5 * (far - near), -0.5 * (near + far),
-+		0.0, 0.0, 0.0, 1.0
-+	);
-+}
++const float size = CLOUD_SHADOW_DISTANCE * 32.0;
++
++const mat4 shadowProj = mat4(
++	2.0 / size, 0.0, 0.0, 0.0,
++	0.0, 2.0 / size, 0.0, 0.0,
++	0.0, 0.0, -2.0 / cumulusTopRadius, -1.0,
++	0.0, 0.0, 0.0, 1.0
++);
++
++const mat4 shadowInvProj = mat4(
++	0.5 * size, 0.0, 0.0, 0.0,
++	0.0, 0.5 * size, 0.0, 0.0,
++	0.0, 0.0, -0.5 * cumulusTopRadius, -0.5 * cumulusTopRadius,
++	0.0, 0.0, 0.0, 1.0
++);
++
 +uniform mat4 shadowModelView;
 +uniform mat4 shadowModelViewInverse;
 +
@@ -3691,11 +3688,9 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.23-orig/
 +	#ifdef CLOUD_SHADOWS
 +		cloud.prevShadowViewProj = cloud.shadowViewProj;
 +
-+		mat4 projMat = BuildOrthoMat(CLOUD_SHADOW_DISTANCE * 32.0, CLOUD_SHADOW_DISTANCE * 32.0, 0.0, cumulusTopRadius);
-+		cloud.shadowViewProj = projMat * shadowModelView;
++		cloud.shadowViewProj = shadowProj * shadowModelView;
 +
-+		mat4 invProjMat = BuildInvOrthoMat(CLOUD_SHADOW_DISTANCE * 32.0, CLOUD_SHADOW_DISTANCE * 32.0, 0.0, cumulusTopRadius);
-+		cloud.shadowViewProjInv = shadowModelViewInverse * invProjMat;
++		cloud.shadowViewProjInv = shadowModelViewInverse * shadowInvProj;
 +	#endif
 +}
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.23-orig/shaders/Lib/clouds/composite/Reconstruct.frag 0.8.23-cloud/shaders/Lib/clouds/composite/Reconstruct.frag
