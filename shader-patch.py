@@ -41,7 +41,7 @@ def apply_patch(directory, patch_file):
     print(result.stdout)
 
     if result.returncode != 0:
-        print("\033[1;31mWARNING: patch command reported errors\033[0m")
+        print("\033[0m\033[1;31mWARNING: patch command reported errors\033[0m")
         print(result.stderr)
 
 def copy_folder_into_zip(extract_dir, source_folder, destination_folder):
@@ -96,7 +96,7 @@ def main():
     TEXTURE_DEST = "shaders/texture"
     
     if not patch_file.exists():
-        print(f"ERROR: Patch file not found: {patch_file}")
+        print(f"\033[1;31mERROR: Patch file not found: {patch_file}\033[0m")
         sys.exit(1)
 
     patch_zip(input_zip, patch_file, output_zip, TEXTURE_SRC, TEXTURE_DEST)
