@@ -20,6 +20,13 @@ Now uses gnu diff
 ```diff -rua --strip-trailing-cr "original-unzipped-folder" "patched-unzipped-folder" > patch.diff```
 
 ## Changelog
+### v2026.7.11 Initial update to 0.8.24
+* **Update to ver. 0.8.24**
+* Convolution bloom now **requires Iris 1.10.5+** due to the base shader using more custom image slots, haven't tested older versions with it off.
+  * Might look into a workaround
+* Known issue: blue lines from convolution bloom in dark environments
+* Possible todo: move cloud shadow texture to colortex23 instead of custom image, however would cause the whole patch to require Iris 1.10.5+
+
 ### v2026.7.5 Atmospherics overhaul
 * **Update to ver. 0.8.23**
 * Port Revelation's cloud system
