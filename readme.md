@@ -4,8 +4,10 @@
 3. Put the unmodified shader zip in the extracted folder
     * The folder should contain the diffs, `texture` folder, `shader-patch.py`, and the shader zip
 4. Open a terminal in the folder or cd to it (`cd path/to/extracted/folder`)
-5. Run the command below. You might need to do it using bash (you can get it from [git](https://git-scm.com/install/windows)) instead of windows cmd if you get a file not found error. Use `itrp-patch-24.diff` for 0.8.24, `itrp-patch-23.diff` for 0.8.23, `itrp-patch-22.diff` for 0.8.22, `itrp-patch-18.diff` for 0.8.18, `itrp-patch-16.diff` for 0.8.13~0.8.16 (does not implement toggleable settings). All new releases will generally be for the most recent shader version only.  
-```python shader-patch.py "iterationRP Alpha (ver).zip" "itrp-patch-(ver).diff" "(ver)-patched.zip"```
+5. Run this command:  
+```python shader-patch.py "iterationRP Alpha (ver).zip" "itrp-patch-(ver).diff" "(ver)-patched.zip"```  
+You might need to do it using bash (you can get it from [git](https://git-scm.com/install/windows)) instead of windows cmd if you get a file not found error.  
+Use `itrp-patch-24.diff` for 0.8.24, `itrp-patch-23.diff` for 0.8.23, `itrp-patch-22.diff` for 0.8.22, `itrp-patch-18.diff` for 0.8.18, `itrp-patch-16.diff` for 0.8.13~0.8.16 (does not implement toggleable settings). **All new releases will generally be for the most recent shader version only.** 
 
 > ### Patcher now automatically copies textures into the shader!
 > Make sure the textures folder is in the same directory as the python file.  
