@@ -751,7 +751,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  			const vec3 waterAttenuation = exp2(-vec3(WATER_ATTENUATION_R, WATER_ATTENUATION_G, WATER_ATTENUATION_B * 0.9) * 20.0);
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/PathTracing/Tracer/DiffuseTracer.glsl 0.8.24-patched/shaders/Lib/PathTracing/Tracer/DiffuseTracer.glsl
 --- 0.8.24-orig/shaders/Lib/PathTracing/Tracer/DiffuseTracer.glsl	2026-07-10 22:15:34.619109500 -0400
-+++ 0.8.24-patched/shaders/Lib/PathTracing/Tracer/DiffuseTracer.glsl	2026-07-11 23:00:40.899738200 -0400
++++ 0.8.24-patched/shaders/Lib/PathTracing/Tracer/DiffuseTracer.glsl	2026-07-12 00:32:39.827816400 -0400
 @@ -1,6 +1,9 @@
  
  
@@ -767,7 +767,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  			#ifdef DIMENSION_OVERWORLD
  			#ifdef SUNLIGHT_LEAK_FIX
 -				sunLighting *= saturate(hitSkylight * 444.0 + float(isEyeInWater == 1));
-+				sunLighting *= saturate(hitSkylight * 444.0 + float(isEyeInWater == 1));\
++				// sunLighting *= saturate(hitSkylight * 444.0 + float(isEyeInWater == 1));
 +				float originalMask = saturate(hitSkylight * 444.0 + float(isEyeInWater == 1));
 +				float eyeSkylight = saturate(float(eyeBrightnessSmooth.y) / 240.0);
 +				sunLighting *= mix(1.0, originalMask, saturate(1.0 - eyeSkylight * 10.0));
