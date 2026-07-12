@@ -24,7 +24,7 @@ Now uses gnu diff
 ## Changelog
 ### v2026.7.12 Update to 0.8.24
 * **Update to ver. 0.8.24**
-* Now **requires Iris 1.10.5+** due to the base shader using more custom image slots, haven't tested older versions with it off.
+* Now **requires Iris 1.10.5+** due to the base shader using more custom image slots
   * Might look into a workaround
 * Zero the image alpha channel before FFT due to information leaking to blue channel in the packed FFT
 
