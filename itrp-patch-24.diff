@@ -1,6 +1,6 @@
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/BasicFunctions/FFT.glsl 0.8.24-patched/shaders/Lib/BasicFunctions/FFT.glsl
 --- 0.8.24-orig/shaders/Lib/BasicFunctions/FFT.glsl	1969-12-31 19:00:00.000000000 -0500
-+++ 0.8.24-patched/shaders/Lib/BasicFunctions/FFT.glsl	2026-07-11 03:11:41.483176400 -0400
++++ 0.8.24-patched/shaders/Lib/BasicFunctions/FFT.glsl	2026-07-11 20:30:22.063437200 -0400
 @@ -0,0 +1,128 @@
 +// by huj31415
 +
@@ -47,15 +47,15 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +  uint Ns4 = Ns >> 2; // Ns / 4
 +  uint offset = x & (Ns4 - 1u); // x % Ns4;
 +
-+  // replace with shared memory LUT
-+  float angle = -INV * TAU * (float(offset) / float(Ns));
-+  vec2 w1 = vec2(cos(angle), sin(angle));
-+
 +  uint base = (x / Ns4) * Ns + offset; // floor(x / Ns4) * Ns + offset;
 +  uint i0 = swizzle(base);
 +  uint i1 = swizzle(base + Ns4);
 +  uint i2 = swizzle(base + Ns4 * 2);
 +  uint i3 = swizzle(base + Ns4 * 3);
++
++  // replace with shared memory LUT
++  float angle = -INV * TAU * (float(offset) / float(Ns));
++  vec2 w1 = vec2(cos(angle), sin(angle));
 +
 +  vec2 t0 = row[i0];
 +  vec2 t1 = cmul(w1, row[i1]);
@@ -69,8 +69,8 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +  row[i3] = t0 - t2 + vec2(t3.y - t1.y, t1.x - t3.x) * INV;
 +}
 +
-+// avoid passing x0-x3 to reduce register pressure, only pass x and compute others inside the function, can #define multiples of N_4_1
-+void rgba1DFFT(uint y, uint x, inout vec4 t0, inout vec4 t1, inout vec4 t2, inout vec4 t3) {
++// avoid passing x0-x3 to reduce register pressure, only pass x and compute others inside the function
++void rgba1DFFT(uint x, inout vec4 t0, inout vec4 t1, inout vec4 t2, inout vec4 t3) {
 +  #if FFT_SIZE == 2048
 +    // load rg as real and imag and do radix 2 prepass
 +    uint p00 = digit_reverse_4(x) << 1;
@@ -2522,7 +2522,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 + 						/*
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/Programs/Composite/ImageConvolveIFFT_CS.glsl 0.8.24-patched/shaders/Lib/Programs/Composite/ImageConvolveIFFT_CS.glsl
 --- 0.8.24-orig/shaders/Lib/Programs/Composite/ImageConvolveIFFT_CS.glsl	1969-12-31 19:00:00.000000000 -0500
-+++ 0.8.24-patched/shaders/Lib/Programs/Composite/ImageConvolveIFFT_CS.glsl	2026-07-11 03:11:41.481789100 -0400
++++ 0.8.24-patched/shaders/Lib/Programs/Composite/ImageConvolveIFFT_CS.glsl	2026-07-11 22:41:41.653718100 -0400
 @@ -0,0 +1,102 @@
 +// by huj31415
 +
@@ -2594,7 +2594,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +  vec4 t2 = freqConvolve(ivec2(x + N_4_2, y));
 +  vec4 t3 = freqConvolve(ivec2(x + N_4_3, y));
 +
-+  rgba1DFFT(y, x, t0, t1, t2, t3);
++  rgba1DFFT(x, t0, t1, t2, t3);
 +
 +  imageStore(tmpFFT, ivec2(y, x), t0);
 +  imageStore(tmpFFT, ivec2(y, x + N_4_1), t1);
@@ -2617,7 +2617,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +  vec4 t2 = imageLoad(tmpFFT, ivec2(x + N_4_2, y));
 +  vec4 t3 = imageLoad(tmpFFT, ivec2(x + N_4_3, y));
 +
-+  rgba1DFFT(y, x, t0, t1, t2, t3);
++  rgba1DFFT(x, t0, t1, t2, t3);
 +
 +  imageStore(imgFFT, ivec2(y, x), t0 * NORM);
 +  imageStore(imgFFT, ivec2(y, x + N_4_1), t1 * NORM);
@@ -2629,7 +2629,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 \ No newline at end of file
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/Programs/Composite/ImageFFT_CS.glsl 0.8.24-patched/shaders/Lib/Programs/Composite/ImageFFT_CS.glsl
 --- 0.8.24-orig/shaders/Lib/Programs/Composite/ImageFFT_CS.glsl	1969-12-31 19:00:00.000000000 -0500
-+++ 0.8.24-patched/shaders/Lib/Programs/Composite/ImageFFT_CS.glsl	2026-07-11 03:11:41.481789100 -0400
++++ 0.8.24-patched/shaders/Lib/Programs/Composite/ImageFFT_CS.glsl	2026-07-11 22:41:39.894600900 -0400
 @@ -0,0 +1,95 @@
 +// by huj31415
 +
@@ -2682,7 +2682,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +  // map thread coordinates to uv
 +  vec2 uv = (vec2(x, y) + 0.5) / size;
 +
-+  return softKnee(textureLod(FBTEX_MAIN_OUTPUT, uv, 0) * GetExposureValue());
++  return softKnee(vec4(textureLod(FBTEX_MAIN_OUTPUT, uv, 0).rgb, 0) * GetExposureValue());
 +}
 +
 +void main() {
@@ -2694,7 +2694,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +  vec4 t2 = sampleThresholdedSceneTex(x + N_4_2, y);
 +  vec4 t3 = sampleThresholdedSceneTex(x + N_4_3, y);
 +
-+  rgba1DFFT(y, x, t0, t1, t2, t3);
++  rgba1DFFT(x, t0, t1, t2, t3);
 +
 +  imageStore(tmpFFT, ivec2(y, x),         t0);
 +  imageStore(tmpFFT, ivec2(y, x + N_4_1), t1);
@@ -2717,7 +2717,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +  vec4 t2 = imageLoad(tmpFFT, ivec2(x + N_4_2, y));
 +  vec4 t3 = imageLoad(tmpFFT, ivec2(x + N_4_3, y));
 +
-+  rgba1DFFT(y, x, t0, t1, t2, t3);
++  rgba1DFFT(x, t0, t1, t2, t3);
 +
 +  imageStore(imgFFT, ivec2(y, x),         t0 * NORM);
 +  imageStore(imgFFT, ivec2(y, x + N_4_1), t1 * NORM);
@@ -3224,7 +3224,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  	#endif
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/Programs/Final_FS.glsl 0.8.24-patched/shaders/Lib/Programs/Final_FS.glsl
 --- 0.8.24-orig/shaders/Lib/Programs/Final_FS.glsl	2026-07-10 22:15:34.827729300 -0400
-+++ 0.8.24-patched/shaders/Lib/Programs/Final_FS.glsl	2026-07-11 03:14:04.625699500 -0400
++++ 0.8.24-patched/shaders/Lib/Programs/Final_FS.glsl	2026-07-11 22:41:44.759659800 -0400
 @@ -218,6 +218,8 @@
  
  
@@ -3246,7 +3246,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  				#endif
  				#endif
  
-@@ -499,6 +504,76 @@
+@@ -499,6 +504,48 @@
  
  uniform sampler2D pixelData2D;
  //*/
@@ -3262,7 +3262,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +	} else {
 +		coordScale.x *= aspectRatio;
 +	}
-+	return max(vec3(0.0), texture2D(FFTout, 1.0 - (coord - 2) * pixelSize * coordScale).rgb);
++	return max(vec3(0.0), textureLod(FFTout, 1.0 - (coord - 2) * pixelSize * coordScale, 0).rgb);
 +}
 +
 +#if defined DIMENSION_OVERWORLD
@@ -3288,34 +3288,6 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +  return color;
 +}
 +
-+// adapted from https://www.shadertoy.com/view/4sX3Rs
-+vec3 lensflare(vec2 uv, vec2 pos)
-+{
-+	vec2 uvd = uv*(length(uv));
-+	float pos2 = dot(pos, pos);
-+
-+	float uvd2 = dot(uvd, uvd);
-+	vec3 f2coeff = vec3(0.8, 0.85, 0.9);
-+	vec3 f2mult = vec3(0.25, 0.23, 0.21);
-+	vec3 c  = max(1.0 / (1.0 + 32.0 * (uvd2 + f2coeff * (2.0 * dot(uvd, pos) + f2coeff * pos2))), vec3(0.0)) * f2mult;
-+	
-+	vec2 uvx = mix(uv,uvd,-0.5);
-+	vec3 f4coeff = vec3(0.4, 0.45, 0.5);
-+	vec3 f4mult = vec3(6.0, 5.0, 3.0);
-+	c += max(0.01 - pow((dot(uvx, uvx) + f4coeff * (2.0 * dot(uvx, pos) + f4coeff * pos2)), vec3(1.2)), vec3(0.0)) * f4mult;
-+	
-+	uvx = mix(uv,uvd,-.4);
-+	vec3 f5coeff = vec3(0.2, 0.4, 0.6);
-+	c += max(0.01 - pow((dot(uvx, uvx) + f5coeff * (2.0 * dot(uvx, pos) + f5coeff * pos2)), vec3(2.75)), vec3(0.0)) * 2.0;
-+	
-+	uvx = mix(uv,uvd,-0.5);
-+	vec3 f6coeff = vec3(0.3, 0.325, 0.35);
-+	vec3 f6mult = vec3(6.0, 3.0, 5.0);
-+	c += max(0.01-pow((dot(uvx, uvx) + f6coeff * (2.0 * dot(uvx, pos) + f6coeff * pos2)), vec3(0.8)), vec3(0.0)) * f6mult;
-+
-+	return c * 1.3 - vec3(length(uvd)*.05);
-+}
-+
 +#define SSBO_DECLARED_TYPE restrict
 +#include "/Lib/clouds/Common.glsl"
 +#include "/Lib/IndividualFunctions/PrintFloat.glsl"
@@ -3323,7 +3295,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  /////////////////////////MAIN//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
  /////////////////////////MAIN//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
  void main(){
-@@ -528,15 +603,36 @@
+@@ -528,15 +575,36 @@
  
  	#else
  
@@ -3366,7 +3338,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  
  		color = TONEMAP_OPERATOR(color);
  
-@@ -545,6 +641,10 @@
+@@ -545,6 +613,10 @@
  		#ifdef ADVANCED_COLOR
  			color = ColorGrading(color);
  		#endif
@@ -3377,7 +3349,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  /*
  		#ifdef HAS_COLORWHEEL
  			#ifdef SUPER_RESOLUTION
-@@ -566,6 +666,32 @@
+@@ -566,6 +638,32 @@
  
  	#endif
  
@@ -3410,7 +3382,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  	framebuffer_mainOutput = vec4(color, 0.0);
  }
  
-@@ -1193,6 +1319,19 @@
+@@ -1193,6 +1291,19 @@
  
  	//if (texelCoord.x < 400) color = vec3(1.3);
  
@@ -3468,7 +3440,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  	vec3 waterNormal = tbn[2];
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/Programs/Setup/KernelFFT_CS.glsl 0.8.24-patched/shaders/Lib/Programs/Setup/KernelFFT_CS.glsl
 --- 0.8.24-orig/shaders/Lib/Programs/Setup/KernelFFT_CS.glsl	1969-12-31 19:00:00.000000000 -0500
-+++ 0.8.24-patched/shaders/Lib/Programs/Setup/KernelFFT_CS.glsl	2026-07-11 03:11:41.481789100 -0400
++++ 0.8.24-patched/shaders/Lib/Programs/Setup/KernelFFT_CS.glsl	2026-07-11 22:20:52.151776800 -0400
 @@ -0,0 +1,81 @@
 +// by huj31415
 +
@@ -3519,7 +3491,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +  vec4 t2 = sampleCenterKernel(x + N_4_2, y);
 +  vec4 t3 = sampleCenterKernel(x + N_4_3, y);
 +
-+  rgba1DFFT(y, x, t0, t1, t2, t3);
++  rgba1DFFT(x, t0, t1, t2, t3);
 +
 +  imageStore(tmpFFT, ivec2(y, x),         t0);
 +  imageStore(tmpFFT, ivec2(y, x + N_4_1), t1);
@@ -3542,7 +3514,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +  vec4 t2 = imageLoad(tmpFFT, ivec2(x + N_4_2, y));
 +  vec4 t3 = imageLoad(tmpFFT, ivec2(x + N_4_3, y));
 +
-+  rgba1DFFT(y, x, t0, t1, t2, t3);
++  rgba1DFFT(x, t0, t1, t2, t3);
 +
 +  imageStore(kerFFT, ivec2(y, x),         t0 * NORM);
 +  imageStore(kerFFT, ivec2(y, x + N_4_1), t1 * NORM);
@@ -3554,7 +3526,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 \ No newline at end of file
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/Settings.glsl 0.8.24-patched/shaders/Lib/Settings.glsl
 --- 0.8.24-orig/shaders/Lib/Settings.glsl	2026-07-10 22:15:33.892501500 -0400
-+++ 0.8.24-patched/shaders/Lib/Settings.glsl	2026-07-11 03:25:32.611890500 -0400
++++ 0.8.24-patched/shaders/Lib/Settings.glsl	2026-07-11 22:20:52.154115900 -0400
 @@ -44,8 +44,24 @@
  
  	#define FBIMG_FSR_LUMA 			colorimg15
@@ -3690,7 +3662,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 \ No newline at end of file
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/UniformDeclare.glsl 0.8.24-patched/shaders/Lib/UniformDeclare.glsl
 --- 0.8.24-orig/shaders/Lib/UniformDeclare.glsl	2026-07-10 22:15:33.926574000 -0400
-+++ 0.8.24-patched/shaders/Lib/UniformDeclare.glsl	2026-07-11 03:14:26.382732200 -0400
++++ 0.8.24-patched/shaders/Lib/UniformDeclare.glsl	2026-07-11 20:25:27.734238800 -0400
 @@ -8,10 +8,22 @@
  uniform int heldItemId2;
  uniform int heldBlockLightValue2;
@@ -3714,7 +3686,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  uniform float aspectRatio;
  uniform float viewWidth;
  uniform float viewHeight;
-@@ -156,7 +168,27 @@
+@@ -156,7 +168,26 @@
  
  uniform sampler2D atlas2D;
  uniform sampler2D atlasSpecular2D;
@@ -3739,11 +3711,10 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +
 +uniform sampler2D cloudOriginTex;
 +uniform sampler2D cloudShadowTex;
-+// for cloud taau
++// for cloud taau, originally 13 and 14
 +uniform sampler2D colortex18;
 +uniform usampler2D colortex19;
 +
-+uniform vec3 viewLightDir;
 +uniform vec3 worldLightDir;
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/Utilities.glsl 0.8.24-patched/shaders/Lib/Utilities.glsl
 --- 0.8.24-orig/shaders/Lib/Utilities.glsl	2026-07-10 22:15:33.942676300 -0400
@@ -6791,7 +6762,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 \ No newline at end of file
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/shaders.properties 0.8.24-patched/shaders/shaders.properties
 --- 0.8.24-orig/shaders/shaders.properties	2026-07-10 22:15:33.701283400 -0400
-+++ 0.8.24-patched/shaders/shaders.properties	2026-07-11 03:25:21.235540200 -0400
++++ 0.8.24-patched/shaders/shaders.properties	2026-07-11 22:20:52.155119000 -0400
 @@ -17,7 +17,7 @@
  shadow.culling    =reversed
  #endif
