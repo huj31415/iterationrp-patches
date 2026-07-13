@@ -525,7 +525,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/IndividualFunctions/VolumetricFog.glsl 0.8.24-patched/shaders/Lib/IndividualFunctions/VolumetricFog.glsl
 --- 0.8.24-orig/shaders/Lib/IndividualFunctions/VolumetricFog.glsl	2026-07-10 22:15:34.431862100 -0400
-+++ 0.8.24-patched/shaders/Lib/IndividualFunctions/VolumetricFog.glsl	2026-07-10 22:27:44.462573400 -0400
++++ 0.8.24-patched/shaders/Lib/IndividualFunctions/VolumetricFog.glsl	2026-07-12 16:22:41.840500200 -0400
 @@ -1,4 +1,6 @@
 -
 +// #ifdef CLOUD_SHADOW
@@ -677,23 +677,25 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  
  		rayDensity += stepRayDensity * shadow;
  
-@@ -252,12 +318,28 @@
+@@ -252,12 +318,30 @@
  	#endif
  
  	color = transmittance * color;
 +	
 +	float angle = degrees(fastAcos(clamp(-VdotL, -1.0, 1.0)));
 +	float rainWeight = rainStrength * (1.0 - eyeSnowySmooth) * (1.0 - eyeNoPrecipitationSmooth);
++	float dispersionWeight = smoothstep(5e-4, 1e-3, max(rayColor.r, max(rayColor.g, rayColor.b)));
++
 +#if GLORY_STRENGTH > 0 && RAINBOW_STRENGTH > 0
-+	color += fogColor + rayColor * mix(
++	color += fogColor + rayColor * mix(vec3(1.0), mix(
 +		1.0 + GLORY_STRENGTH * GloryLut(angle),
 +		RAINBOW_STRENGTH * RainbowLut(angle),
 +		rainWeight
-+	);
++	), dispersionWeight);
 +#elif GLORY_STRENGTH > 0
-+	color += fogColor + rayColor * mix(1.0 + GLORY_STRENGTH * GloryLut(angle), 1.0, rainWeight);
++	color += fogColor + rayColor * mix(vec3(1.0), mix(1.0 + GLORY_STRENGTH * GloryLut(angle), 1.0, rainWeight), dispersionWeight);
 +#elif RAINBOW_STRENGTH > 0
-+	color += fogColor + rayColor * mix(1.0, RAINBOW_STRENGTH * RainbowLut(angle), rainWeight);
++	color += fogColor + rayColor * mix(vec3(1.0), mix(1.0, RAINBOW_STRENGTH * RainbowLut(angle), rainWeight), dispersionWeight);
 +#else
  	color += fogColor + rayColor;
 +#endif
@@ -707,7 +709,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  
  	vec3 result = vec3(0.0);
  
-@@ -265,10 +347,10 @@
+@@ -265,10 +349,10 @@
  	if (rayLength < range){
  	
  		float endLength = length(endPos);
@@ -722,7 +724,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  		
  		vec3 shadowStart = ShadowScreenPos_From_WorldPos(startPos + gbufferModelViewInverse[3].xyz);
  		vec3 shadowEnd = ShadowScreenPos_From_WorldPos(endPos + gbufferModelViewInverse[3].xyz);
-@@ -303,13 +385,22 @@
+@@ -303,13 +387,22 @@
  				caustics *= step(shadowPos.z, solidDepth);
  			}
  
@@ -813,7 +815,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  		if (depth < 0.0){
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/Programs/Composite/ImageConvolveIFFT_CS.glsl 0.8.24-patched/shaders/Lib/Programs/Composite/ImageConvolveIFFT_CS.glsl
 --- 0.8.24-orig/shaders/Lib/Programs/Composite/ImageConvolveIFFT_CS.glsl	1969-12-31 19:00:00.000000000 -0500
-+++ 0.8.24-patched/shaders/Lib/Programs/Composite/ImageConvolveIFFT_CS.glsl	2026-07-11 22:41:41.653718100 -0400
++++ 0.8.24-patched/shaders/Lib/Programs/Composite/ImageConvolveIFFT_CS.glsl	2026-07-12 16:54:04.430927300 -0400
 @@ -0,0 +1,102 @@
 +// by huj31415
 +
@@ -860,7 +862,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +  vec2 Out_G = cmul(F_G, K_G);
 +
 +  vec2 F_B = vec2(h_img.z + h_imgSym.z, h_img.w - h_imgSym.w);
-+  vec2 K_B = vec2(h_ker.z + h_kerSym.z, h_ker.y - h_kerSym.y);
++  vec2 K_B = vec2(h_ker.z + h_kerSym.z, h_ker.w - h_kerSym.w);
 +  vec2 Out_B = cmul(F_B, K_B);
 +
 +  vec2 F_A = vec2(h_img.w + h_imgSym.w, h_imgSym.z - h_img.z);
@@ -887,7 +889,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +
 +  rgba1DFFT(x, t0, t1, t2, t3);
 +
-+  imageStore(tmpFFT, ivec2(y, x), t0);
++  imageStore(tmpFFT, ivec2(y, x),         t0);
 +  imageStore(tmpFFT, ivec2(y, x + N_4_1), t1);
 +  imageStore(tmpFFT, ivec2(y, x + N_4_2), t2);
 +  imageStore(tmpFFT, ivec2(y, x + N_4_3), t3);
@@ -910,7 +912,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +
 +  rgba1DFFT(x, t0, t1, t2, t3);
 +
-+  imageStore(imgFFT, ivec2(y, x), t0 * NORM);
++  imageStore(imgFFT, ivec2(y, x),         t0 * NORM);
 +  imageStore(imgFFT, ivec2(y, x + N_4_1), t1 * NORM);
 +  imageStore(imgFFT, ivec2(y, x + N_4_2), t2 * NORM);
 +  imageStore(imgFFT, ivec2(y, x + N_4_3), t3 * NORM);
@@ -2023,7 +2025,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  // ((9 - 69^(1/2))^(1/3) + (9 + 69^(1/2))^(1/3)) / (2^(1/3) * 3^(2/3))
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/clouds/Common.glsl 0.8.24-patched/shaders/Lib/clouds/Common.glsl
 --- 0.8.24-orig/shaders/Lib/clouds/Common.glsl	1969-12-31 19:00:00.000000000 -0500
-+++ 0.8.24-patched/shaders/Lib/clouds/Common.glsl	2026-07-11 03:14:04.625699500 -0400
++++ 0.8.24-patched/shaders/Lib/clouds/Common.glsl	2026-07-12 20:34:50.072842600 -0400
 @@ -0,0 +1,430 @@
 +#if !defined INCLUDE_CLOUDS_COMMON
 +#define INCLUDE_CLOUDS_COMMON
@@ -2608,8 +2610,8 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +}
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/clouds/Render.glsl 0.8.24-patched/shaders/Lib/clouds/Render.glsl
 --- 0.8.24-orig/shaders/Lib/clouds/Render.glsl	1969-12-31 19:00:00.000000000 -0500
-+++ 0.8.24-patched/shaders/Lib/clouds/Render.glsl	2026-07-10 22:13:38.000000000 -0400
-@@ -0,0 +1,364 @@
++++ 0.8.24-patched/shaders/Lib/clouds/Render.glsl	2026-07-12 18:12:06.360155000 -0400
+@@ -0,0 +1,377 @@
 +/*
 +--------------------------------------------------------------------------------
 +
@@ -2709,16 +2711,16 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +	return single + multiple;
 +}
 +
-+vec2 CloudMultiScatteringApproxHaringPro(float opticalDepth, float phase, float extinction, float albedo) {
++vec2 CloudMultiScatteringApproxHaringPro(float opticalDepth, float phase, float coarseExtinction, float albedo) {
 +	// https://zhuanlan.zhihu.com/p/457997155
-+	float fms = albedo * oms(approxExp(-12.0 * extinction));
++	float fms = albedo * oms(approxExp(-192.0 * coarseExtinction));
 +    float msBase = fms / (1.0 - fms);
 +
-+    float scatteringSun = approxExp(-opticalDepth) * phase;
++    float scatteringSun = exp(-opticalDepth) * phase;
 +    scatteringSun += approxExp(-0.3 * opticalDepth) * mix(phase, uniformPhase, fms) * msBase;
 +
-+    float skyTransmittance = rcp(sqr(1.0 + 8.0 * extinction));
-+    float scatteringSky = skyTransmittance * (1.0 + msBase);
++    float skyTransmittance = approxExp(-128.0 * coarseExtinction);
++    float scatteringSky = skyTransmittance * (2.0 + msBase);
 +
 +	return vec2(scatteringSun, scatteringSky);
 +}
@@ -2817,13 +2819,17 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +
 +			// Intersect the volume
 +			if (intersection.y > 0.0) {
-+				float rayLength = clamp(intersection.y - intersection.x, 0.0, 5e4);
++				
++				const float maxRaymarchingDist = 5e4;
++				float tMax = clamp(intersection.y - intersection.x, 0.0, maxRaymarchingDist);
 +
-+				float raySteps = float(CLOUD_LOW_SAMPLES_MAX) / 5e4 * rayLength;
-+				raySteps = round(max(raySteps, float(CLOUD_LOW_SAMPLES_MIN)));
++				// Variable step count based on raymarching distance
++				float stepCount = mix(CLOUD_LOW_SAMPLES_MIN, CLOUD_LOW_SAMPLES_MAX, saturate(tMax * rcp(maxRaymarchingDist)));
++				float stepCountFloor = floor(stepCount);
++				float tMaxFloor = tMax * stepCountFloor / stepCount;
++				stepCountFloor = 1.0 / stepCountFloor;
 +
-+				float stepSize = rayLength * rcp(raySteps);
-+				float rayT = intersection.x + stepSize * noise.x;
++				vec3 startPos = atmosphereViewPos + rayDir * intersection.x;
 +
 +				float sumDist = 0.0;
 +
@@ -2831,8 +2837,17 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +				float transmittance = 1.0;
 +
 +				// Raymarch through the cloud volume
-+				for (uint i = 0u; i < uint(raySteps); ++i, rayT += stepSize) {
-+					vec3 rayPos = atmosphereViewPos + rayDir * rayT;
++				for (float i = 0.0; i < stepCount; ++i) {
++					vec2 t01 = vec2(i, i + 1.0) * stepCountFloor;
++
++					// Square distribution
++					t01 *= t01;
++					t01 *= tMaxFloor;
++
++					float t = mix(t01.x, t01.y, noise.x);
++					float dt = t01.y - t01.x;
++
++					vec3 rayPos = startPos + rayDir * t;
 +
 +					// Normalized height in clouds
 +					float heightFraction = fma(length(rayPos), rcp(cumulusThickness), -cumulusBottomRadius / cumulusThickness);
@@ -2840,7 +2855,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +
 +					// Compute sample cloud density
 +					float dimensionalProfile;
-+					float stepDensity = CloudVolumeDensity(rayPos, heightFraction, dimensionalProfile, rayT < 16e3);
++					float stepDensity = CloudVolumeDensity(rayPos, heightFraction, dimensionalProfile, true);
 +
 +					// Skip if no density
 +					if (stepDensity > cloudEpsilon) {
@@ -2848,14 +2863,14 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +						float opticalDepthSun = CloudVolumeOpticalDepth(rayPos, lightDir, noise.y, CLOUD_LOW_SUNLIGHT_SAMPLES);
 +
 +						// Approximate multi-scattering
-+						float coarseDensity = dimensionalProfile * approxSqrt(stepDensity);
-+						vec2 scattering = CloudMultiScatteringApproxHaringPro(opticalDepthSun, phase, coarseDensity, cumulusAlbedo);
++						float coarseExtinction = dimensionalProfile * approxSqrt(stepDensity) * cumulusExtinction;
++						vec2 scattering = CloudMultiScatteringApproxHaringPro(opticalDepthSun, phase, coarseExtinction, cumulusAlbedo);
 +
 +						// Estimate the light optical depth of the ground from the cloud volume
-+						float scatteringGround = oms(coarseDensity) * 0.5 * uniformPhase;
++						float scatteringGround = oms(dimensionalProfile) * 0.5 * uniformPhase;
 +						scattering += scatteringGround * lightDir.y;
 +
-+						float stepOpticalDepth = stepDensity * stepSize;
++						float stepOpticalDepth = stepDensity * dt;
 +						float stepTransmittance = exp2(-rLOG2 * cumulusExtinction * stepOpticalDepth);
 +
 +						// Energy-conserving analytical integration from [Hillaire, 2016]
@@ -2865,7 +2880,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +
 +						// Method from [Hillaire, 2016]
 +						// Weighted by stepIntegral instead of transmittance
-+						sumDist += rayT * stepIntegral;
++						sumDist += (t + intersection.x) * stepIntegral;
 +
 +						// Break if the transmittance is too small (optimization)
 +						if (transmittance < cloudMinTransmittance) {

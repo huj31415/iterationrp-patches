@@ -27,6 +27,9 @@ Now uses gnu diff
 * Now **requires Iris 1.10.5+** due to the base shader using more custom image slots
   * Might look into a workaround
 * Zero the image alpha channel before FFT due to information leaking to blue channel in the packed FFT
+* Only apply dispersion (rainbows, glories) in direct sunlight. Makes rainbows rarer, they no longer happen every time there's rain
+* Update Revelation cloud rendering
+* Fix bug in FFT convolution
 
 ### v2026.7.5 Atmospherics overhaul
 * **Update to ver. 0.8.23**
