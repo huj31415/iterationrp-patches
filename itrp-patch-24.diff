@@ -525,7 +525,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/IndividualFunctions/VolumetricFog.glsl 0.8.24-patched/shaders/Lib/IndividualFunctions/VolumetricFog.glsl
 --- 0.8.24-orig/shaders/Lib/IndividualFunctions/VolumetricFog.glsl	2026-07-10 22:15:34.431862100 -0400
-+++ 0.8.24-patched/shaders/Lib/IndividualFunctions/VolumetricFog.glsl	2026-07-12 16:22:41.840500200 -0400
++++ 0.8.24-patched/shaders/Lib/IndividualFunctions/VolumetricFog.glsl	2026-07-14 18:08:10.406916600 -0400
 @@ -1,4 +1,6 @@
 -
 +// #ifdef CLOUD_SHADOW
@@ -677,29 +677,26 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  
  		rayDensity += stepRayDensity * shadow;
  
-@@ -252,12 +318,30 @@
+@@ -252,12 +318,27 @@
  	#endif
  
  	color = transmittance * color;
-+	
-+	float angle = degrees(fastAcos(clamp(-VdotL, -1.0, 1.0)));
-+	float rainWeight = rainStrength * (1.0 - eyeSnowySmooth) * (1.0 - eyeNoPrecipitationSmooth);
-+	float dispersionWeight = smoothstep(5e-4, 1e-3, max(rayColor.r, max(rayColor.g, rayColor.b)));
 +
-+#if GLORY_STRENGTH > 0 && RAINBOW_STRENGTH > 0
-+	color += fogColor + rayColor * mix(vec3(1.0), mix(
-+		1.0 + GLORY_STRENGTH * GloryLut(angle),
-+		RAINBOW_STRENGTH * RainbowLut(angle),
-+		rainWeight
-+	), dispersionWeight);
-+#elif GLORY_STRENGTH > 0
-+	color += fogColor + rayColor * mix(vec3(1.0), mix(1.0 + GLORY_STRENGTH * GloryLut(angle), 1.0, rainWeight), dispersionWeight);
-+#elif RAINBOW_STRENGTH > 0
-+	color += fogColor + rayColor * mix(vec3(1.0), mix(1.0, RAINBOW_STRENGTH * RainbowLut(angle), rainWeight), dispersionWeight);
-+#else
- 	color += fogColor + rayColor;
++// apply rain/fog dispersion effects
++#if GLORY_STRENTH > 0 || RAINBOW_STRENGTH > 0
++	float angle = degrees(fastAcos(clamp(-VdotL, -1.0, 1.0)));
++
++	// rainbow when raining, glory when not raining
++	float rainWeight = rainStrength * (1.0 - eyeSnowySmooth) * (1.0 - eyeNoPrecipitationSmooth);
++	vec3 glory = GLORY_STRENGTH > 0 ? 1.0 + GLORY_STRENGTH * GloryLut(angle) : vec3(1.0);
++	vec3 rainbow = RAINBOW_STRENGTH > 0 ? RAINBOW_STRENGTH * RainbowLut(angle) : vec3(1.0);
++
++	// only apply when sunlit
++	float dispersionWeight = smoothstep(5e-4, 1e-3, max(rayColor.r, max(rayColor.g, rayColor.b)));
++	rayColor *= mix(vec3(1.0), mix(glory, rainbow, rainWeight), dispersionWeight);
 +#endif
 +
+ 	color += fogColor + rayColor;
  }
  
  
@@ -709,7 +706,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  
  	vec3 result = vec3(0.0);
  
-@@ -265,10 +349,10 @@
+@@ -265,10 +346,10 @@
  	if (rayLength < range){
  	
  		float endLength = length(endPos);
@@ -724,7 +721,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  		
  		vec3 shadowStart = ShadowScreenPos_From_WorldPos(startPos + gbufferModelViewInverse[3].xyz);
  		vec3 shadowEnd = ShadowScreenPos_From_WorldPos(endPos + gbufferModelViewInverse[3].xyz);
-@@ -303,13 +387,22 @@
+@@ -303,13 +384,22 @@
  				caustics *= step(shadowPos.z, solidDepth);
  			}
  
@@ -1517,7 +1514,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  	#endif
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/Programs/Final_FS.glsl 0.8.24-patched/shaders/Lib/Programs/Final_FS.glsl
 --- 0.8.24-orig/shaders/Lib/Programs/Final_FS.glsl	2026-07-10 22:15:34.827729300 -0400
-+++ 0.8.24-patched/shaders/Lib/Programs/Final_FS.glsl	2026-07-11 22:41:44.759659800 -0400
++++ 0.8.24-patched/shaders/Lib/Programs/Final_FS.glsl	2026-07-16 16:38:25.255638700 -0400
 @@ -218,6 +218,8 @@
  
  
@@ -1819,7 +1816,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 \ No newline at end of file
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/Settings.glsl 0.8.24-patched/shaders/Lib/Settings.glsl
 --- 0.8.24-orig/shaders/Lib/Settings.glsl	2026-07-10 22:15:33.892501500 -0400
-+++ 0.8.24-patched/shaders/Lib/Settings.glsl	2026-07-11 22:20:52.154115900 -0400
++++ 0.8.24-patched/shaders/Lib/Settings.glsl	2026-07-16 16:38:02.916219600 -0400
 @@ -44,8 +44,24 @@
  
  	#define FBIMG_FSR_LUMA 			colorimg15
@@ -1948,7 +1945,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +	#define CLOUD_SELFSHADOW_SOFTENING 5 // [0 1 2 3 4 5 6 7 8]
 +// Other atmospherics
 +	#define GLORY_STRENGTH 2.0 // [0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.2 1.5 2.0 2.5 3.0]
-+	#define RAINBOW_STRENGTH 10.0 // [0.0 1.0 2.0 4.0 6.0 8.0 10.0 12.0 14.0 16.0 18.0 20.0]
++	#define RAINBOW_STRENGTH 8.0 // [0.0 1.0 2.0 4.0 6.0 8.0 10.0 12.0 14.0 16.0 18.0 20.0]
 +
 +	// #define WHITE_SNOW
 +	#define DYNAMIC_FOG
@@ -2610,7 +2607,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +}
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/clouds/Render.glsl 0.8.24-patched/shaders/Lib/clouds/Render.glsl
 --- 0.8.24-orig/shaders/Lib/clouds/Render.glsl	1969-12-31 19:00:00.000000000 -0500
-+++ 0.8.24-patched/shaders/Lib/clouds/Render.glsl	2026-07-12 18:12:06.360155000 -0400
++++ 0.8.24-patched/shaders/Lib/clouds/Render.glsl	2026-07-16 18:33:58.868351800 -0400
 @@ -0,0 +1,377 @@
 +/*
 +--------------------------------------------------------------------------------
@@ -2668,14 +2665,14 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +
 +	float sumDensity = 0.0;
 +	for (uint i = 0u; i < steps && sumDensity < threshold; ++i) {
-+		float fi = float(i) + noise;
++		float fi = float(i);
 +
 +#if CLOUD_SELFSHADOW_SOFTENING > 0
 +		rot *= rotMatGA; // rotate by golden angle
 +		vec2 offset = rot * sumDensity;
-+		vec3 samplePos = rayPos + rayStep * sqr(fi) + tangent * offset.x + sunRotAxis * offset.y;
++		vec3 samplePos = rayPos + rayStep * sqr(fi + noise) + tangent * offset.x + sunRotAxis * offset.y;
 +#else
-+		vec3 samplePos = rayPos + rayStep * sqr(fi);
++		vec3 samplePos = rayPos + rayStep * sqr(fi + noise);
 +#endif
 +
 +		// Normalized height in clouds
@@ -2684,7 +2681,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +
 +		float temp;
 +		float density = CloudVolumeDensity(samplePos, heightFraction, temp, i < 3u);
-+		sumDensity += density * fi;
++		sumDensity += density * (fi + 0.5);
 +	}
 +
 +	return cumulusExtinction * 2.0 * stepLength * sumDensity;
@@ -3672,8 +3669,8 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +}
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/clouds/composite/Reconstruct.frag 0.8.24-patched/shaders/Lib/clouds/composite/Reconstruct.frag
 --- 0.8.24-orig/shaders/Lib/clouds/composite/Reconstruct.frag	1969-12-31 19:00:00.000000000 -0500
-+++ 0.8.24-patched/shaders/Lib/clouds/composite/Reconstruct.frag	2026-07-11 03:14:26.382732200 -0400
-@@ -0,0 +1,200 @@
++++ 0.8.24-patched/shaders/Lib/clouds/composite/Reconstruct.frag	2026-07-16 18:27:33.645330000 -0400
+@@ -0,0 +1,210 @@
 +/*
 +--------------------------------------------------------------------------------
 +
@@ -3810,8 +3807,14 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +	vec2 screenCoord = gl_FragCoord.xy * UNIFORM_PIXEL_SIZE;
 +	vec2 currCoord = screenCoord - UNIFORM_TAA_JITTER * (0.5 * float(CLOUD_TAAU_SCALE));
 +
++	#if SR_ENABLE
++		vec2 SR_currCoord = currCoord * SR_RENDER_SCALE_FACTOR;
++	#else
++		#define SR_currCoord currCoord
++	#endif
++
 +	// Fetch closest cloud depth
-+	float cloudDepth = minOf(textureGather(cloudOriginTex, currCoord, 2));
++	float cloudDepth = minOf(textureGather(cloudOriginTex, SR_currCoord, 2));
 +
 +	// Skip ground
 +	if (cloudDepth < EPS) return;
@@ -3831,9 +3834,13 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +
 +	if (disocclusion) {
 +		// Return smoothed origin
-+		cloudOut = textureBicubic(cloudOriginTex, currCoord);
++		cloudOut = textureBicubic(cloudOriginTex, SR_currCoord);
 +	} else {
-+		ivec2 cloudTexSize = textureSize(cloudOriginTex, 0);
++		#if SR_ENABLE
++			ivec2 cloudTexSize = ivec2(textureSize(cloudOriginTex, 0) * SR_RENDER_SCALE_FACTOR);
++		#else
++			ivec2 cloudTexSize = ivec2(textureSize(cloudOriginTex, 0));
++		#endif
 +		ivec2 currTexel = clamp(uvToTexel(currCoord) / CLOUD_TAAU_SCALE, ivec2(0), cloudTexSize - 1);
 +
 +		// ivec2 currTexel = uvToTexel(currCoord) / CLOUD_TAAU_SCALE;
@@ -3876,8 +3883,8 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +}
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/clouds/composite/Render.comp 0.8.24-patched/shaders/Lib/clouds/composite/Render.comp
 --- 0.8.24-orig/shaders/Lib/clouds/composite/Render.comp	1969-12-31 19:00:00.000000000 -0500
-+++ 0.8.24-patched/shaders/Lib/clouds/composite/Render.comp	2026-07-10 22:13:38.000000000 -0400
-@@ -0,0 +1,117 @@
++++ 0.8.24-patched/shaders/Lib/clouds/composite/Render.comp	2026-07-16 18:27:45.761901700 -0400
+@@ -0,0 +1,121 @@
 +/*
 +--------------------------------------------------------------------------------
 +
@@ -3899,7 +3906,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +
 +// todo: taa without upscaling
 +#ifdef CLOUD_TAAU_ENABLED
-+	#if FSR2_SCALE == 0
++	#if FSR2_SCALE == 0 || SR_ENABLE
 +		const vec2 workGroupsRender = vec2(0.5, 0.5);
 +	#elif FSR2_SCALE == 1
 +		const vec2 workGroupsRender = vec2(0.3333, 0.3333);
@@ -3984,7 +3991,11 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +	vec4 cloudOut = vec4(0.0, 0.0, 0.0, 1.0);
 +
 +	//if (any(equal(vec4(1.0), depth))) {
-+	if (SkyCheck4x4(pixelSize * rawDepthCoord)) {
++	if (SkyCheck4x4(pixelSize * rawDepthCoord)
++#if SR_ENABLE
++	  && all(lessThanEqual(renderCoord, vec2(1)))
++#endif
++	 ) {
 +		vec2 noise = BlueNoiseTemporal(texelPos); //SampleStbnVec2(texelPos, frameCounter + 11);
 +
 +		vec3 viewDir  = ScreenToViewDirRaw(renderCoord);
@@ -4273,7 +4284,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 \ No newline at end of file
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/shaders.properties 0.8.24-patched/shaders/shaders.properties
 --- 0.8.24-orig/shaders/shaders.properties	2026-07-10 22:15:33.701283400 -0400
-+++ 0.8.24-patched/shaders/shaders.properties	2026-07-11 22:20:52.155119000 -0400
++++ 0.8.24-patched/shaders/shaders.properties	2026-07-16 17:56:09.079481200 -0400
 @@ -17,7 +17,7 @@
  shadow.culling    =reversed
  #endif
@@ -4330,7 +4341,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  
  flip.composite25.colortex10=true
  flip.composite67.colortex10=true
-@@ -440,6 +461,113 @@
+@@ -440,6 +461,117 @@
  #image.img_rippleXY2D = rippleXY2D RG RG32F FLOAT false false 2048 2048
  #image.img_ripple2D = ripple2D RGBA RGBA8 UNSIGNED_BYTE false false 128 7680
  
@@ -4369,7 +4380,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +
 +# may need fixed taau scale for applying with fsr2
 +
-+#if FSR2_SCALE >= 0 && defined CLOUD_TAAU_ENABLED
++#if (FSR2_SCALE >= 0) && defined CLOUD_TAAU_ENABLED
 +	#if FSR2_SCALE == 0
 +		size.buffer.colortex18 = 1.0 1.0
 +		size.buffer.colortex19 = 1.0 1.0
@@ -4391,10 +4402,14 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +		size.buffer.colortex19 = 0.3333 0.3333
 +		image.cloudOriginImg	= cloudOriginTex RGBA RGBA16F HALF_FLOAT false true 0.1667 0.1667			
 +	#endif
++#elif defined CLOUD_TAAU_ENABLED && SR_ENABLE
++	size.buffer.colortex18 = SR_RENDER_SCALE_FACTOR SR_RENDER_SCALE_FACTOR
++	size.buffer.colortex19 = SR_RENDER_SCALE_FACTOR SR_RENDER_SCALE_FACTOR
++	image.cloudOriginImg	 = cloudOriginTex RGBA RGBA16F HALF_FLOAT false true 0.5 0.5
 +#elif defined CLOUD_TAAU_ENABLED
 +	size.buffer.colortex18 = 1.0 1.0
 +	size.buffer.colortex19 = 1.0 1.0
-+	image.cloudOriginImg			= cloudOriginTex RGBA RGBA16F HALF_FLOAT false true 0.5 0.5
++	image.cloudOriginImg	 = cloudOriginTex RGBA RGBA16F HALF_FLOAT false true 0.5 0.5
 +#else
 +	#if FSR2_SCALE == 0
 +		image.cloudOriginImg			= cloudOriginTex RGBA RGBA16F HALF_FLOAT false true 1.0 1.0
@@ -4444,7 +4459,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  
  texture.noise=texture/noise.png
  
-@@ -815,7 +943,10 @@
+@@ -815,7 +947,10 @@
  screen.SCREENSHOT.columns=1
  	screen.ANIMATION.columns=2
  screen.DEBUG.columns=2
@@ -4456,7 +4471,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  
  
  
-@@ -840,7 +971,7 @@
+@@ -840,7 +975,7 @@
  		[SCREENSHOT]        <empty> \
  		<empty>             <empty> \
  		<empty>             <empty> \
@@ -4465,7 +4480,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  
  screen.PT_VOXEL=PT_VOXEL_RESOLUTION <empty> PT_MIDBLOCK_TEMPFIX PT_FULLBLOCK_VERIFICATION <empty> PT_TAG_DETECTION PT_FULLBLOCK_DETECTION PT_FULLBLOCK_DETECTION_ALPHA_TRACING <empty> VANILLA_EMISSIVE
  
-@@ -1123,7 +1254,7 @@
+@@ -1123,7 +1258,7 @@
  							AE_OFFSET                 <empty> \
  							<empty>                   MANUAL_EXPOSURE \
  							LUMINANCE_WEIGHT_MODE     EV_VALUE \
@@ -4474,7 +4489,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  
  	screen.MOTION_BLUR_SETTING= MOTION_BLUR MOTION_BLUR_DITHER MOTION_BLUR_QUALITY <empty> MOTION_BLUR_SUTTER_MODE MOTION_BLUR_SUTTER_ANGLE MOTION_BLUR_SUTTER_SPEED
  
-@@ -1182,7 +1313,7 @@
+@@ -1182,7 +1317,7 @@
  
  screen.DEBUG =  DEBUG_COUNTER              PT_TRACING_EYE \
  				WHITE_DEBUG_WORLD          DEBUG_IRC \
@@ -4483,7 +4498,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  				FTC_OFFSET                 <empty> \
  				CLOUD_SPEED                DEBUG_RTW \
  				<empty>                    <empty> \
-@@ -1191,7 +1322,38 @@
+@@ -1191,7 +1326,38 @@
  				DISABLE_REFLECTION_TEMPORAL_MOTIONWEIGHT
  
  
@@ -4522,7 +4537,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  
  
  sliders=PT_VOXEL_RESOLUTION \
-@@ -1236,4 +1398,8 @@
+@@ -1236,4 +1402,8 @@
  		DH_TEXTURE_NOISE_STEPS DH_TEXTURE_NOISE_STRENGTH \
  		TACZ_ADAPTIVE_EMISSIVE_BRIGHTNESS TACZ_MUZZLE_FLASH_BRIGHTNESS \
  		RENDERING_MODE_SPP RENDERING_MODE_COOLDOWN \

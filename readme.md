@@ -22,7 +22,7 @@ Now uses gnu diff
 ```diff -rua --strip-trailing-cr "original-unzipped-folder" "patched-unzipped-folder" > patch.diff```
 
 ## Changelog
-### v2026.7.12 Update to 0.8.24
+### v2026.7.16 Update to 0.8.24
 * **Update to ver. 0.8.24**
 * Now **requires Iris 1.10.5+** due to the base shader using more custom image slots
   * Might look into a workaround
@@ -30,6 +30,7 @@ Now uses gnu diff
 * Only apply dispersion (rainbows, glories) in direct sunlight. Makes rainbows rarer, they no longer happen every time there's rain
 * Update Revelation cloud rendering
 * Fix bug in FFT convolution
+* Fix cloud rendering with Super Resolution mod. Using SR with the built in FSR is not supported
 
 ### v2026.7.5 Atmospherics overhaul
 * **Update to ver. 0.8.23**
