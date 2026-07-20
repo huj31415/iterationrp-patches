@@ -131,6 +131,135 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +  t3.ba = row[swizzle(x + N_4_3)];
 +}
 \ No newline at end of file
+diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/BasicFunctions/GameplayEffects.glsl 0.8.24-patched/shaders/Lib/BasicFunctions/GameplayEffects.glsl
+--- 0.8.24-orig/shaders/Lib/BasicFunctions/GameplayEffects.glsl	1969-12-31 19:00:00.000000000 -0500
++++ 0.8.24-patched/shaders/Lib/BasicFunctions/GameplayEffects.glsl	2026-07-20 17:00:43.376611400 -0400
+@@ -0,0 +1,124 @@
++// from https://github.com/Merlin1809/Eclipse-Shader/blob/Unstable/shaders/lib/gameplay_effects.glsl
++
++uniform float currentPlayerHealth;
++uniform float maxPlayerHealth;
++uniform float oneHeart;
++uniform float threeHeart;
++
++uniform float CriticalDamageTaken;
++uniform float MinorDamageTaken;
++
++uniform float exitWater;
++uniform float enterWater;
++uniform float exitLava;
++// uniform float exitPowderSnow;
++// uniform int isEyeInWater;
++
++// uniform float currentPlayerHunger;
++// uniform float maxPlayerHunger;
++
++// uniform float currentPlayerArmor;
++// uniform float maxPlayerArmor;
++
++// uniform float currentPlayerAir;
++// uniform float maxPlayerAir;
++
++// uniform bool is_sneaking;
++// uniform bool is_sprinting;
++// uniform bool is_hurt;
++// uniform bool is_invisible;
++// uniform bool is_burning;
++
++// uniform bool is_on_ground;
++// uniform bool isSpectator;
++
++void applyGameplayEffects(inout vec3 color, in vec2 texcoord, float noise){
++   
++    // detect when health is zero
++    bool isDead = currentPlayerHealth * maxPlayerHealth <= 0.0 && currentPlayerHealth > -1;
++
++    float distortmask = 0.0;
++    float vignette = sqrt(clamp(dot(texcoord*2.0 - 1.0, texcoord*2.0 - 1.0) * 0.5, 0.0, 1.0));
++
++    //////////////////////// DAMAGE DISTORTION /////////////////////
++    #if defined LOW_HEALTH_EFFECT || defined DAMAGE_TAKEN_EFFECT   
++        float heartBeat = (pow(sin(1 + 2*sin(frameTimeCounter * 10))*0.5+0.5,2.0)*0.2 + 0.1) ;
++        
++        // apply low health distortion effects
++        float damageDistortion = vignette * noise * heartBeat * threeHeart;
++        
++        // apply critical hit distortion effect
++        damageDistortion = mix(damageDistortion, vignette * (0.5 + noise), CriticalDamageTaken) * MOTION_AMOUNT;
++        
++        // apply death distortion effect
++        distortmask = damageDistortion; // isDead ? vignette * (0.7 + noise*0.3) : 
++    #endif
++    //////////////////////// WATER DISTORTION /////////////////////
++    #ifdef WATER_ON_CAMERA_EFFECT
++        if(exitWater > 0.0){
++            vec3 scale = vec3(1.0,1.0,0.0);
++            bool eyeInWater = isEyeInWater == 1;
++            scale.xy = (eyeInWater ? vec2(0.3) : vec2(0.5, 0.25 + (exitWater*exitWater)*0.25 ) ) * vec2(aspectRatio,1.0);
++            scale.z = eyeInWater ? 0.0 : exitWater;
++
++
++            float waterDrops = 0.0;
++            if(!eyeInWater) waterDrops = texture(noisetex, (texcoord - vec2(0.0, scale.z)) * scale.xy).b;
++            if(isEyeInWater == 0 && exitWater > 0.0) waterDrops = sqrt(min(max(waterDrops - (1.0-sqrt(exitWater)),0.0) * (1.0 + exitWater),1.0)) * WATER_ON_CAMERA_STRENGTH;
++
++            // apply distortion effects for exiting water and under water
++            distortmask = max(distortmask, waterDrops);
++        }
++        // if(enterWater > 0.0){
++        //     vec2 zoomTC = 0.5 + (texcoord - 0.5) * (sqrt(1.0-enterWater));
++        //     float waterSplash = texture(noisetex, zoomTC * vec2(aspectRatio,1.0)).a * (1.0-enterWater);
++
++        //     distortmask = max(distortmask, waterSplash);
++        // }
++    #endif
++    //////////////////////// HEAT DISTORTION /////////////////////
++    #ifdef ON_FIRE_DISTORT_EFFECT
++      if(exitLava > 0.0){
++            vec2 zoomin = 0.5 + (texcoord - 0.5) * (1.0-pow(1.0-clamp(-texcoord.y*0.5+0.75,0.0,1.0),1.0)) * (1.0-pow(1.0-exitLava,2.0));
++
++            vec2 UV = zoomin;
++
++            float flameDistort = texture(noisetex,  UV * vec2(aspectRatio,1.0) - vec2(0.0,frameTimeCounter*0.3)).b * clamp(-texcoord.y*0.3+0.3,0.0,1.0) * ON_FIRE_DISTORT_EFFECT_STRENGTH * exitLava;
++
++            distortmask = max(distortmask, flameDistort);
++        }
++    #endif
++
++    //////////////////////// APPLY DISTORTION /////////////////////
++    // all of the distortion will be based around zooming the UV in the center
++    vec2 zoomUV = 0.5 + (texcoord - 0.5) * (1.0 - distortmask);
++    
++    vec3 distortedColor = texture(FBTEX_MAIN_OUTPUT, zoomUV).rgb;
++
++    #if defined WATER_ON_CAMERA_EFFECT || defined ON_FIRE_DISTORT_EFFECT
++        // apply the distorted water color to the scene, but revert back to before when it ends
++        if(exitWater > 0.01 || exitLava > 0.01) color = distortedColor;
++    #endif
++
++
++    //////////////////////// APPLY COLOR EFFECTS /////////////////////
++    #if defined LOW_HEALTH_EFFECT || defined DAMAGE_TAKEN_EFFECT   
++        vec3 distortedColorLuma =  vec3(1.0, 0.0, 0.0) * dot(distortedColor, vec3(0.21, 0.72, 0.07));
++    
++        #ifdef LOW_HEALTH_EFFECT
++            float colorLuma = dot(color, vec3(0.21, 0.72, 0.07));
++
++            vec3 LumaRedEdges = mix(vec3(colorLuma), vec3(1.0, 0.3, 0.3) * distortedColorLuma.r, vignette);
++
++            // apply color effects for when you are at low health
++            color = mix(color, LumaRedEdges, mix(vignette * threeHeart, oneHeart, oneHeart));
++        #endif
++
++        #ifdef DAMAGE_TAKEN_EFFECT
++            color = mix(color, distortedColorLuma, vignette * sqrt(min(MinorDamageTaken,1.0)));
++            // color = mix(color, distortedColorLuma, sqrt(CriticalDamageTaken));
++        #endif
++
++        // if(isDead) color = distortedColorLuma * 0.35;
++    #endif
++}
+\ No newline at end of file
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl 0.8.24-patched/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl
 --- 0.8.24-orig/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl	2026-07-10 22:15:34.026241400 -0400
 +++ 0.8.24-patched/shaders/Lib/BasicFunctions/PrecomputedAtmosphere.glsl	2026-07-10 22:13:38.000000000 -0400
@@ -1514,7 +1643,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  	#endif
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/Programs/Final_FS.glsl 0.8.24-patched/shaders/Lib/Programs/Final_FS.glsl
 --- 0.8.24-orig/shaders/Lib/Programs/Final_FS.glsl	2026-07-10 22:15:34.827729300 -0400
-+++ 0.8.24-patched/shaders/Lib/Programs/Final_FS.glsl	2026-07-16 16:38:25.255638700 -0400
++++ 0.8.24-patched/shaders/Lib/Programs/Final_FS.glsl	2026-07-20 17:16:04.416594200 -0400
 @@ -218,6 +218,8 @@
  
  
@@ -1536,7 +1665,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  				#endif
  				#endif
  
-@@ -499,6 +504,48 @@
+@@ -499,6 +504,50 @@
  
  uniform sampler2D pixelData2D;
  //*/
@@ -1581,20 +1710,25 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +#define SSBO_DECLARED_TYPE restrict
 +#include "/Lib/clouds/Common.glsl"
 +#include "/Lib/IndividualFunctions/PrintFloat.glsl"
++#include "/Lib/BasicFunctions/GameplayEffects.glsl"
++#include "/Lib/BasicFunctions/TemporalNoise.glsl"
 +
  /////////////////////////MAIN//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
  /////////////////////////MAIN//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
  void main(){
-@@ -528,15 +575,36 @@
+@@ -528,16 +577,39 @@
  
  	#else
  
 -		#ifdef BLOOM
 -			color = mix(color, textureLod(FBTEX_ALT_OUTPUT, texCoord * 0.5, 0.0).rgb, data1.a);
--		#endif
 +		// #ifdef BLOOM
 +		// 	color = mix(color, textureLod(FBTEX_ALT_OUTPUT, texCoord * 0.5, 0.0).rgb, data1.a);
 +		// #endif
++		#if defined LOW_HEALTH_EFFECT || defined DAMAGE_TAKEN_EFFECT || defined WATER_ON_CAMERA_EFFECT
++			applyGameplayEffects(color, texCoord, BlueNoise().x);
+ 		#endif
++		float expValue = GetExposureValue();
  
 -		#ifdef VIGNETTE
 -			color *= Vignette(texCoord, VIGNETTE_FALLOFF, VIGNETTE_ROUNDNESS);
@@ -1602,11 +1736,10 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +			color = getConvBloom(texelCoord);
 +		#else
 +			#ifdef DEBUG_THRESHOLD
-+				color = softKnee(color * GetExposureValue());
++				color = softKnee(color * expValue);
 +			#endif
 +		#endif
 +		#if !defined DEBUG_CONV_BLOOM && !defined DEBUG_THRESHOLD
-+			float expValue = GetExposureValue();
 +			#if defined EXPOSURE_BASED_BLOOM && defined BLOOM
 +			// mix between normal bloom and convolution bloom to simulate aperture adjusting based on brightness
 +				color = mix(
@@ -1624,11 +1757,12 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  		#endif
  
 -		color *= GetExposureValue();
+-
 +		// color *= GetExposureValue();
- 
  		color = TONEMAP_OPERATOR(color);
  
-@@ -545,6 +613,10 @@
+ 		color = saturate(color);
+@@ -545,6 +617,10 @@
  		#ifdef ADVANCED_COLOR
  			color = ColorGrading(color);
  		#endif
@@ -1639,7 +1773,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  /*
  		#ifdef HAS_COLORWHEEL
  			#ifdef SUPER_RESOLUTION
-@@ -566,6 +638,32 @@
+@@ -566,6 +642,32 @@
  
  	#endif
  
@@ -1672,7 +1806,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  	framebuffer_mainOutput = vec4(color, 0.0);
  }
  
-@@ -1193,6 +1291,19 @@
+@@ -1193,6 +1295,19 @@
  
  	//if (texelCoord.x < 400) color = vec3(1.3);
  
@@ -1706,28 +1840,6 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  #endif
  
  uniform mat4 gbufferModelView;
-diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl 0.8.24-patched/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl
---- 0.8.24-orig/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl	2026-07-10 22:15:36.222856900 -0400
-+++ 0.8.24-patched/shaders/Lib/Programs/Gbuffers/VX_Water_FS.glsl	2026-07-10 22:13:38.000000000 -0400
-@@ -30,8 +30,9 @@
- //albedo
- 	vec4 albedo = parameters.sampledColour * parameters.tinting;
- 
-+	bool isWater = parameters.customId == 6000.0;
- //lightmap
--	vec2 blockLight = vec2(0.0, saturate(parameters.lightMap.y * 16.0 / 15.0 - 0.5 / 15.0));
-+	vec2 blockLight = vec2(0.0, saturate(parameters.lightMap.y * 16.0 / 15.0 - 0.5 / 15.0) * float(isWater));
- 
- //TBN
- 	vec3 N = vec3(
-@@ -47,7 +48,6 @@
- 
- //material
- 	float materialIDs = MATID_STAINEDGLASS;
--	bool isWater = parameters.customId == 6000.0;
- 
- //normal
- 	vec3 waterNormal = tbn[2];
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/Programs/Setup/KernelFFT_CS.glsl 0.8.24-patched/shaders/Lib/Programs/Setup/KernelFFT_CS.glsl
 --- 0.8.24-orig/shaders/Lib/Programs/Setup/KernelFFT_CS.glsl	1969-12-31 19:00:00.000000000 -0500
 +++ 0.8.24-patched/shaders/Lib/Programs/Setup/KernelFFT_CS.glsl	2026-07-11 22:20:52.151776800 -0400
@@ -1816,7 +1928,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 \ No newline at end of file
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/Settings.glsl 0.8.24-patched/shaders/Lib/Settings.glsl
 --- 0.8.24-orig/shaders/Lib/Settings.glsl	2026-07-10 22:15:33.892501500 -0400
-+++ 0.8.24-patched/shaders/Lib/Settings.glsl	2026-07-16 16:38:02.916219600 -0400
++++ 0.8.24-patched/shaders/Lib/Settings.glsl	2026-07-20 17:13:16.833061900 -0400
 @@ -44,8 +44,24 @@
  
  	#define FBIMG_FSR_LUMA 			colorimg15
@@ -1878,7 +1990,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
    //#define DEBUG_COUNTER
    //#define DISABLE_NIGHTVISION
    //#define DISABLE_BLINDNESS_DARKNESS
-@@ -821,4 +840,68 @@
+@@ -821,4 +840,81 @@
    //#define DEBUG_IRC
    //#define DISABLE_REFLECTION_TEMPORAL_MOTIONWEIGHT
  
@@ -1949,6 +2061,19 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +
 +	// #define WHITE_SNOW
 +	#define DYNAMIC_FOG
++
++
++// Bliss/Eclipse gameplay effects
++	#define LOW_HEALTH_EFFECT
++	#define DAMAGE_TAKEN_EFFECT
++	#define LOW_HEALTH_EFFECT_START 6.0 // [1.0 2.0 3.0 4.0 5.0 6.0 7.0 8.0 9.0 10.0 11.0 12.0 13.0 14.0 15.0 16.0 17.0 18.0 19.0 20.0 21.0 22.0 23.0 24.0]
++	#define CRITICALLY_LOW_HEALTH_EFFECT_START 2.0 // [1.0 2.0 3.0 4.0 5.0 6.0 7.0 8.0 9.0 10.0 11.0 12.0 13.0 14.0 15.0 16.0 17.0 18.0 19.0 20.0 21.0 22.0 23.0 24.0]
++	#define WATER_ON_CAMERA_EFFECT
++	#define WATER_ON_CAMERA_STRENGTH 0.2 // [0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0]
++	#define WATER_ON_CAMERA_TIME 1.5 // [1.0 1.5 2.0 2.5 3.0 3.5 4.0 4.5 5.0]
++	// #define ON_FIRE_DISTORT_EFFECT
++	#define ON_FIRE_DISTORT_EFFECT_STRENGTH 0.7 // [0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0]
++	#define MOTION_AMOUNT 0.25
 \ No newline at end of file
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/UniformDeclare.glsl 0.8.24-patched/shaders/Lib/UniformDeclare.glsl
 --- 0.8.24-orig/shaders/Lib/UniformDeclare.glsl	2026-07-10 22:15:33.926574000 -0400
@@ -2022,8 +2147,8 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  // ((9 - 69^(1/2))^(1/3) + (9 + 69^(1/2))^(1/3)) / (2^(1/3) * 3^(2/3))
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/clouds/Common.glsl 0.8.24-patched/shaders/Lib/clouds/Common.glsl
 --- 0.8.24-orig/shaders/Lib/clouds/Common.glsl	1969-12-31 19:00:00.000000000 -0500
-+++ 0.8.24-patched/shaders/Lib/clouds/Common.glsl	2026-07-12 20:34:50.072842600 -0400
-@@ -0,0 +1,430 @@
++++ 0.8.24-patched/shaders/Lib/clouds/Common.glsl	2026-07-19 17:12:07.737607800 -0400
+@@ -0,0 +1,436 @@
 +#if !defined INCLUDE_CLOUDS_COMMON
 +#define INCLUDE_CLOUDS_COMMON
 +
@@ -2205,6 +2330,12 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +float atmosphereViewHeight = planetRadius + 256.0 + eyeAltitude;
 +vec3 atmosphereViewPos = vec3(0.0, atmosphereViewHeight, 0.0);
 +
++
++struct CloudRenderResult {
++	vec3 scatteredLight;
++	float transmittance;
++	float frontDepth;
++};
 +
 +// Math.glsl
 +const float rLOG2 		    = 1.44269504089;
@@ -3883,8 +4014,8 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +}
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/Lib/clouds/composite/Render.comp 0.8.24-patched/shaders/Lib/clouds/composite/Render.comp
 --- 0.8.24-orig/shaders/Lib/clouds/composite/Render.comp	1969-12-31 19:00:00.000000000 -0500
-+++ 0.8.24-patched/shaders/Lib/clouds/composite/Render.comp	2026-07-16 18:27:45.761901700 -0400
-@@ -0,0 +1,121 @@
++++ 0.8.24-patched/shaders/Lib/clouds/composite/Render.comp	2026-07-16 21:41:24.252125000 -0400
+@@ -0,0 +1,120 @@
 +/*
 +--------------------------------------------------------------------------------
 +
@@ -3976,6 +4107,9 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +		#define scaledTexelPos texelPos
 +		vec2 rawDepthCoord = (vec2(texelPos) + 0.5);
 +	#endif
++#if SR_ENABLE
++	  if(any(greaterThan(renderCoord, vec2(1)))) return;
++#endif
 +// /*
 +	// vec4 depth = textureGather(depthtex1, pixelSize * rawDepthCoord, 0);
 +	// vec3 viewPos = ViewPos_From_ScreenPos(rawDepthCoord, minOf(depth));
@@ -3991,11 +4125,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +	vec4 cloudOut = vec4(0.0, 0.0, 0.0, 1.0);
 +
 +	//if (any(equal(vec4(1.0), depth))) {
-+	if (SkyCheck4x4(pixelSize * rawDepthCoord)
-+#if SR_ENABLE
-+	  && all(lessThanEqual(renderCoord, vec2(1)))
-+#endif
-+	 ) {
++	if (SkyCheck4x4(pixelSize * rawDepthCoord)) {
 +		vec2 noise = BlueNoiseTemporal(texelPos); //SampleStbnVec2(texelPos, frameCounter + 11);
 +
 +		vec3 viewDir  = ScreenToViewDirRaw(renderCoord);
@@ -4177,8 +4307,8 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +#include "/Lib/Programs/Composite/PixelData_VS.glsl"
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/lang/en_us.lang 0.8.24-patched/shaders/lang/en_us.lang
 --- 0.8.24-orig/shaders/lang/en_us.lang	2026-07-10 22:15:33.833086600 -0400
-+++ 0.8.24-patched/shaders/lang/en_us.lang	2026-07-10 22:13:38.000000000 -0400
-@@ -789,3 +789,74 @@
++++ 0.8.24-patched/shaders/lang/en_us.lang	2026-07-20 17:15:29.681356900 -0400
+@@ -789,3 +789,87 @@
  
  
  screen.DEBUG=§7Debug
@@ -4253,6 +4383,19 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +screen.DISPERSION_FX=Dispersion Effects
 +option.GLORY_STRENGTH=Glory strength
 +option.RAINBOW_STRENGTH=Rainbow strength
++
++
++screen.GAMEPLAY_FX = Bliss/Eclipse Gameplay Effects
++option.MOTION_AMOUNT = Motion/distortion strength
++option.WATER_ON_CAMERA_EFFECT = Exit water effect
++option.WATER_ON_CAMERA_STRENGTH = Strength of water effect
++option.WATER_ON_CAMERA_TIME = Water effect duration
++option.DAMAGE_TAKEN_EFFECT = Damage taken effect
++option.ON_FIRE_DISTORT_EFFECT = On-Fire effect
++option.ON_FIRE_DISTORT_EFFECT_STRENGTH = On-Fire effect strength
++option.LOW_HEALTH_EFFECT = Low health effects
++option.LOW_HEALTH_EFFECT_START = Minimum health for low health effect
++option.CRITICALLY_LOW_HEALTH_EFFECT_START = Minimum health for critically low health effect
 \ No newline at end of file
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/setup.csh 0.8.24-patched/shaders/setup.csh
 --- 0.8.24-orig/shaders/setup.csh	1969-12-31 19:00:00.000000000 -0500
@@ -4284,7 +4427,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 \ No newline at end of file
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/shaders.properties 0.8.24-patched/shaders/shaders.properties
 --- 0.8.24-orig/shaders/shaders.properties	2026-07-10 22:15:33.701283400 -0400
-+++ 0.8.24-patched/shaders/shaders.properties	2026-07-16 17:56:09.079481200 -0400
++++ 0.8.24-patched/shaders/shaders.properties	2026-07-20 17:16:58.612909500 -0400
 @@ -17,7 +17,7 @@
  shadow.culling    =reversed
  #endif
@@ -4341,7 +4484,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  
  flip.composite25.colortex10=true
  flip.composite67.colortex10=true
-@@ -440,6 +461,117 @@
+@@ -440,6 +461,156 @@
  #image.img_rippleXY2D = rippleXY2D RG RG32F FLOAT false false 2048 2048
  #image.img_ripple2D = ripple2D RGBA RGBA8 UNSIGNED_BYTE false false 128 7680
  
@@ -4385,42 +4528,54 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +		size.buffer.colortex18 = 1.0 1.0
 +		size.buffer.colortex19 = 1.0 1.0
 +		image.cloudOriginImg	= cloudOriginTex RGBA RGBA16F HALF_FLOAT false true 0.5 0.5
++		# image.cloudDepthImg		= cloudDepthTex RED R16F HALF_FLOAT false true 0.5 0.5
 +	#elif FSR2_SCALE == 1
 +		size.buffer.colortex18 = 0.6667 0.6667
 +		size.buffer.colortex19 = 0.6667 0.6667
 +		image.cloudOriginImg	= cloudOriginTex RGBA RGBA16F HALF_FLOAT false true 0.3333 0.3333
++		# image.cloudDepthImg		= cloudDepthTex RED R16F HALF_FLOAT false true 0.3333 0.3333
 +	#elif FSR2_SCALE == 2
 +		size.buffer.colortex18 = 0.5882 0.5882
 +		size.buffer.colortex19 = 0.5882 0.5882
 +		image.cloudOriginImg	= cloudOriginTex RGBA RGBA16F HALF_FLOAT false true 0.2941 0.2941
++		# image.cloudDepthImg		= cloudDepthTex RED R16F HALF_FLOAT false true 0.2941 0.2941
 +	#elif FSR2_SCALE == 3
 +		size.buffer.colortex18 = 0.5 0.5
 +		size.buffer.colortex19 = 0.5 0.5
 +		image.cloudOriginImg	= cloudOriginTex RGBA RGBA16F HALF_FLOAT false true 0.25 0.25
++		# image.cloudDepthImg		= cloudDepthTex RED R16F HALF_FLOAT false true 0.25 0.25
 +	#elif FSR2_SCALE == 4
 +		size.buffer.colortex18 = 0.3333 0.3333
 +		size.buffer.colortex19 = 0.3333 0.3333
-+		image.cloudOriginImg	= cloudOriginTex RGBA RGBA16F HALF_FLOAT false true 0.1667 0.1667			
++		image.cloudOriginImg	= cloudOriginTex RGBA RGBA16F HALF_FLOAT false true 0.1667 0.1667
++		# image.cloudDepthImg		= cloudDepthTex RED R16F HALF_FLOAT false true 0.1667 0.1667
 +	#endif
 +#elif defined CLOUD_TAAU_ENABLED && SR_ENABLE
 +	size.buffer.colortex18 = SR_RENDER_SCALE_FACTOR SR_RENDER_SCALE_FACTOR
 +	size.buffer.colortex19 = SR_RENDER_SCALE_FACTOR SR_RENDER_SCALE_FACTOR
 +	image.cloudOriginImg	 = cloudOriginTex RGBA RGBA16F HALF_FLOAT false true 0.5 0.5
++	# image.cloudDepthImg		= cloudDepthTex RED R16F HALF_FLOAT false true 0.5 0.5
 +#elif defined CLOUD_TAAU_ENABLED
 +	size.buffer.colortex18 = 1.0 1.0
 +	size.buffer.colortex19 = 1.0 1.0
 +	image.cloudOriginImg	 = cloudOriginTex RGBA RGBA16F HALF_FLOAT false true 0.5 0.5
++	# image.cloudDepthImg		= cloudDepthTex RED R16F HALF_FLOAT false true 0.5 0.5
 +#else
 +	#if FSR2_SCALE == 0
 +		image.cloudOriginImg			= cloudOriginTex RGBA RGBA16F HALF_FLOAT false true 1.0 1.0
++		# image.cloudDepthImg			= cloudDepthTex RED R16F HALF_FLOAT false true 1.0 1.0
 +	#elif FSR2_SCALE == 1
 +		image.cloudOriginImg			= cloudOriginTex RGBA RGBA16F HALF_FLOAT false true 0.6667 0.6667
++		# image.cloudDepthImg			= cloudDepthTex RED R16F HALF_FLOAT false true 0.6667 0.6667
 +	#elif FSR2_SCALE == 2
 +		image.cloudOriginImg			= cloudOriginTex RGBA RGBA16F HALF_FLOAT false true 0.5882 0.5882
++		# image.cloudDepthImg			= cloudDepthTex RED R16F HALF_FLOAT false true 0.5882 0.5882
 +	#elif FSR2_SCALE == 3
 +		image.cloudOriginImg			= cloudOriginTex RGBA RGBA16F HALF_FLOAT false true 0.5 0.5
++		# image.cloudDepthImg			= cloudDepthTex RED R16F HALF_FLOAT false true 0.5 0.5
 +	#elif FSR2_SCALE == 4
 +		image.cloudOriginImg			= cloudOriginTex RGBA RGBA16F HALF_FLOAT false true 0.3333 0.3333
++		# image.cloudDepthImg			= cloudDepthTex RED R16F HALF_FLOAT false true 0.3333 0.3333
 +	#endif
 +#endif
 +
@@ -4454,12 +4609,39 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +customTexture.mieLut=texture/miescattering_mu512_r256_1_20um.bin TEXTURE_2D RGBA32F 512 256 RGBA FLOAT
 +customTexture.rainbowLut=texture/rainbowlut_0_65deg.bin TEXTURE_1D RGBA32F 512 RGBA FLOAT
 +
++#ifdef WATER_ON_CAMERA_EFFECT
++	uniform.float.exitWater = smooth(if(isEyeInWater == 1,1,0),0.0,WATER_ON_CAMERA_TIME)
++	uniform.float.enterWater = smooth(if(isEyeInWater == 1,1,0),1.5,0.0)
++#endif
++#ifdef ON_FIRE_DISTORT_EFFECT
++	uniform.float.exitLava = smooth(if(isEyeInWater == 2 || is_burning,1,0),0.5,3.0)
++#endif
++
++#if defined LOW_HEALTH_EFFECT || defined DAMAGE_TAKEN_EFFECT
++	variable.float.Currenthealth = currentPlayerHealth * maxPlayerHealth
++	uniform.float.oneHeart = smooth(if(Currenthealth <= CRITICALLY_LOW_HEALTH_EFFECT_START && currentPlayerHealth > -1.0, 1,0), 0.0,1.0)
++	uniform.float.threeHeart = smooth(if(Currenthealth <= max(LOW_HEALTH_EFFECT_START,CRITICALLY_LOW_HEALTH_EFFECT_START) && currentPlayerHealth > -1.0, 1,0), 0.0,1.0)
++
++	variable.float.interpolatedHealth = smooth(if(is_hurt, 0.0, Currenthealth), 0.0, 1.0)
++
++	# detect over 5 hearts of damage taken
++	variable.bool.largeHealthDifference = (interpolatedHealth - Currenthealth) >= 7.0
++	variable.bool.delayedCritDamage = smooth(if(largeHealthDifference, 1.0, 0.0), 0.0, 1.0) > 0.01
++
++	uniform.float.CriticalDamageTaken = smooth(if(delayedCritDamage && currentPlayerHealth > -1.0, 1.0, 0.0), 0.5, 3.0)
++
++	# detect over 2 hearts of damage taken
++	variable.bool.smallHealthDifference = (interpolatedHealth - Currenthealth) >= 3.0
++	uniform.float.MinorDamageTaken = smooth(if(smallHealthDifference && currentPlayerHealth > -1.0, 5.0, 0.0), 0.5, 1.0)
++
++#endif
++
 +# ssbo
 +bufferObject.0 = 256
  
  texture.noise=texture/noise.png
  
-@@ -815,7 +947,10 @@
+@@ -815,7 +986,11 @@
  screen.SCREENSHOT.columns=1
  	screen.ANIMATION.columns=2
  screen.DEBUG.columns=2
@@ -4468,10 +4650,11 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +	screen.CONVOLUTION_BLOOM.columns=1
 +	screen.ATMOSPHERICS.columns=2
 +	screen.DISPERSION_FX.columns=2
++	screen.GAMEPLAY_FX.columns=2
  
  
  
-@@ -840,7 +975,7 @@
+@@ -840,7 +1015,7 @@
  		[SCREENSHOT]        <empty> \
  		<empty>             <empty> \
  		<empty>             <empty> \
@@ -4480,7 +4663,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  
  screen.PT_VOXEL=PT_VOXEL_RESOLUTION <empty> PT_MIDBLOCK_TEMPFIX PT_FULLBLOCK_VERIFICATION <empty> PT_TAG_DETECTION PT_FULLBLOCK_DETECTION PT_FULLBLOCK_DETECTION_ALPHA_TRACING <empty> VANILLA_EMISSIVE
  
-@@ -1123,7 +1258,7 @@
+@@ -1123,7 +1298,7 @@
  							AE_OFFSET                 <empty> \
  							<empty>                   MANUAL_EXPOSURE \
  							LUMINANCE_WEIGHT_MODE     EV_VALUE \
@@ -4489,7 +4672,7 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  
  	screen.MOTION_BLUR_SETTING= MOTION_BLUR MOTION_BLUR_DITHER MOTION_BLUR_QUALITY <empty> MOTION_BLUR_SUTTER_MODE MOTION_BLUR_SUTTER_ANGLE MOTION_BLUR_SUTTER_SPEED
  
-@@ -1182,7 +1317,7 @@
+@@ -1182,7 +1357,7 @@
  
  screen.DEBUG =  DEBUG_COUNTER              PT_TRACING_EYE \
  				WHITE_DEBUG_WORLD          DEBUG_IRC \
@@ -4498,14 +4681,17 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
  				FTC_OFFSET                 <empty> \
  				CLOUD_SPEED                DEBUG_RTW \
  				<empty>                    <empty> \
-@@ -1191,7 +1326,38 @@
+@@ -1191,8 +1366,48 @@
  				DISABLE_REFLECTION_TEMPORAL_MOTIONWEIGHT
  
  
+-
+-
 +screen.PATCHES =       MOON_PHASES \
 +								MOON_PHASE_LIGHTING   NEW_MOON_BRIGHTNESS \
 +								LEAVES_SSS_MULT       <empty> \
-+								[CONVOLUTION_BLOOM]   [ATMOSPHERICS]
++								[CONVOLUTION_BLOOM]   [ATMOSPHERICS] \
++								[GAMEPLAY_FX]
 +	screen.CONVOLUTION_BLOOM = CONV_BLOOM     FFT_SIZE \
 +								<empty> \
 +	              KER_TEX_SIZE          KERNEL_FRACTION \
@@ -4532,12 +4718,21 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +												CLOUD_MAX_ACCUM_FRAMES  CLOUD_TAAU_ANTIFLICKER \
 +												<empty> <empty> \
 +												DEBUG_CLOUD_TEX  DEBUG_CLOUD_SHADOW
- 
++
 +    screen.DISPERSION_FX = GLORY_STRENGTH  RAINBOW_STRENGTH
- 
++
++	screen.GAMEPLAY_FX = MOTION_AMOUNT <empty> \
++												LOW_HEALTH_EFFECT DAMAGE_TAKEN_EFFECT \
++												LOW_HEALTH_EFFECT_START CRITICALLY_LOW_HEALTH_EFFECT_START \
++												<empty> <empty> \
++												WATER_ON_CAMERA_EFFECT <empty> \
++												WATER_ON_CAMERA_STRENGTH WATER_ON_CAMERA_TIME \
++												<empty> <empty> \
++ 												ON_FIRE_DISTORT_EFFECT ON_FIRE_DISTORT_EFFECT_STRENGTH
  
  sliders=PT_VOXEL_RESOLUTION \
-@@ -1236,4 +1402,8 @@
+ 		PT_DIFFUSE_TRACING_DISTANCE PT_DIFFUSE_SPP PT_DIFFUSE_SST_THICKNESS PT_DIFFUSE_TEMPORAL_MAX_ACCUM PT_DIFFUSE_SPATIAL_FILTER_DETAIL PT_DIFFUSE_SPATIAL_FILTER_LUMINANCE_WEIGHT PT_DIFFUSE_SPATIAL_FILTER_DEPTH_WEIGHT PT_DIFFUSE_SPATIAL_FILTER_NORMAL_WEIGHT PT_DIFFUSE_REFRACTION_IOR \
+@@ -1236,4 +1451,9 @@
  		DH_TEXTURE_NOISE_STEPS DH_TEXTURE_NOISE_STRENGTH \
  		TACZ_ADAPTIVE_EMISSIVE_BRIGHTNESS TACZ_MUZZLE_FLASH_BRIGHTNESS \
  		RENDERING_MODE_SPP RENDERING_MODE_COOLDOWN \
@@ -4546,7 +4741,8 @@ diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/
 +		NEW_MOON_BRIGHTNESS LEAVES_SSS_MULT \
 +		KER_TEX_SIZE FFT_SIZE KERNEL_FRACTION CONV_BLOOM_STRENGTH CONV_BLOOM_STRENGTH_NETHER CONV_BLOOM_STRENGTH_END BLOOM_THRESHOLD BLOOM_KNEE_MULT CAP_LUMINANCE EXPOSURE_BLOOM_TRANSITION \
 +		CLOUD_CU_COVERAGE PC_CLEAR_COVERAGE COVERAGE_BIAS CLOUD_CU_ALTITUDE CLOUD_CU_THICKNESS CLOUD_LOW_SAMPLES_MIN CLOUD_LOW_SAMPLES_MAX CLOUD_LOW_SUNLIGHT_SAMPLES CLOUD_LOW_SKYLIGHT_SAMPLES CLOUD_LOW_WIND_SPEED CLOUD_LOW_WIND_ANGLE CLOUD_CU_DENSITY_B CLOUD_CU_DENSITY_T CLOUD_MAX_ACCUM_FRAMES CLOUD_TAAU_ANTIFLICKER \
-+		CLOUD_SELFSHADOW_SOFTENING GLORY_STRENGTH RAINBOW_STRENGTH
++		CLOUD_SELFSHADOW_SOFTENING GLORY_STRENGTH RAINBOW_STRENGTH \
++		MOTION_AMOUNT LOW_HEALTH_EFFECT_START CRITICALLY_LOW_HEALTH_EFFECT_START WATER_ON_CAMERA_STRENGTH WATER_ON_CAMERA_TIME ON_FIRE_DISTORT_EFFECT_STRENGTH
 diff -Nrua --strip-trailing-cr '--exclude=.git' '--exclude=texture' 0.8.24-orig/shaders/world-1/composite77.csh 0.8.24-patched/shaders/world-1/composite77.csh
 --- 0.8.24-orig/shaders/world-1/composite77.csh	1969-12-31 19:00:00.000000000 -0500
 +++ 0.8.24-patched/shaders/world-1/composite77.csh	2026-07-10 22:13:38.000000000 -0400

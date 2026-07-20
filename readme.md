@@ -22,6 +22,9 @@ Now uses gnu diff
 ```diff -rua --strip-trailing-cr "original-unzipped-folder" "patched-unzipped-folder" > patch.diff```
 
 ## Changelog
+### v2026.7.20 Bliss/Eclipse gameplay effects
+* Add low health, water, fire effects from Bliss/Eclipse
+
 ### v2026.7.16 Update to 0.8.24
 * **Update to ver. 0.8.24**
 * Now **requires Iris 1.10.5+** due to the base shader using more custom image slots
