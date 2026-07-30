@@ -1,5 +1,6 @@
 import zipfile
 import tempfile
+import logging
 import patch_ng
 import sys
 from pathlib import Path
@@ -80,18 +81,29 @@ def patch_zip(input_zip, patch_file, output_zip, tex_src, tex_dest):
 
 
 def main():
-    if len(sys.argv) != 4:
+    if len(sys.argv) < 4 or len(sys.argv) > 5:
         print("Usage:")
-        print("python shader-patch.py input.zip patch.diff output.zip")
+        print("python shader-patch.py input.zip patch.diff output.zip [verbosity: 0 (default), 1, 2]")
         sys.exit(1)
 
     input_zip = Path(sys.argv[1])
     patch_file = Path(sys.argv[2]).resolve()
     output_zip = Path(sys.argv[3])
+    
+    verbosity = sys.argv[4] if len(sys.argv) > 4 else "0"
+    if (verbosity) not in ["0", "1", "2"]:
+        print("Invalid verbosity level. Use 0 (default), 1, or 2.")
+        sys.exit(1)
+    verbosity_levels = {0:logging.WARNING, 1:logging.INFO, 2:logging.DEBUG}
+    loglevel = verbosity_levels[int(verbosity)]
+
+    logging.basicConfig(level=loglevel)
+    logger = logging.getLogger("patch_ng")
+    logger.setLevel(loglevel)
 
     TEXTURE_SRC = Path(__file__).parent / "texture"
     TEXTURE_DEST = "shaders/texture"
-    
+
     if not patch_file.exists():
         print(f"\033[1;31mERROR: Patch file not found: {patch_file}\033[0m")
         sys.exit(1)
