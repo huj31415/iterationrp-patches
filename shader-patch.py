@@ -1,6 +1,6 @@
 import zipfile
 import tempfile
-import subprocess
+import patch_ng
 import sys
 from pathlib import Path
 import shutil
@@ -31,18 +31,15 @@ def create_zip(directory, zip_path):
 
 
 def apply_patch(directory, patch_file):
-    result = subprocess.run(
-        ["patch", "-p1", "-i", str(patch_file)],
-        cwd=directory,
-        capture_output=True,
-        text=True
-    )
+    patch_set = patch_ng.fromfile(str(patch_file))
+    if not patch_set:
+        print("\033[0m\033[1;31mWARNING: Could not parse patch file.\033[0m")
+        return
 
-    print(result.stdout)
+    success = patch_set.apply(root=str(directory), strip=1)
 
-    if result.returncode != 0:
-        print("\033[0m\033[1;31mWARNING: patch command reported errors\033[0m")
-        print(result.stderr)
+    if not success:
+        print("\033[0m\033[1;31mWARNING: patch-ng reported errors while applying the patch.\033[0m")
 
 def copy_folder_into_zip(extract_dir, source_folder, destination_folder):
     source_folder = Path(source_folder)
