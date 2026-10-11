@@ -31,12 +31,13 @@ Now uses gnu diff
 
 ### v2026.7.21 Bliss/Eclipse gameplay effects
 * Add low health, water, fire effects from Bliss/Eclipse
-* Remove watermarks
+* Remove periodic watermarks
 
 ### v2026.7.16 Update to 0.8.24
 * **Update to ver. 0.8.24**
-* Now **requires Iris 1.10.5+** due to the base shader using more custom image slots
+* Now **requires Iris 1.10.5+ OR Super Resolution mod** due to the base shader using more custom image slots
   * Might look into a workaround
+  * Installing but not enabling super resolution should also work for older versions, haven't tested
 * Zero the image alpha channel before FFT due to information leaking to blue channel in the packed FFT
 * Only apply dispersion (rainbows, glories) in direct sunlight. Makes rainbows rarer, they no longer happen every time there's rain
 * Update Revelation cloud rendering
