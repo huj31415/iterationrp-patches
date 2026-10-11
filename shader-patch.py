@@ -7,7 +7,7 @@ from pathlib import Path
 import shutil
 
 # To generate the patch file:
-# git diff --no-index original_shader_folder patched_shader_folder > patch.diff
+# diff -Nrua --strip-trailing-cr "original" "patched" --exclude=".git" --exclude="texture" > patch.diff
 
 # Usage:
 # python shader-patch.py input.zip patch.diff output.zip

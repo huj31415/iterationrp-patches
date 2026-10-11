@@ -17,9 +17,8 @@ Use the patch with the number matching the last number in the shader version. Fo
 6. Move the patched shader output to your shaderpacks folder and enjoy!
 
 ## Generating a diff
-Now uses gnu diff
 
-```diff -rua --strip-trailing-cr "original-unzipped-folder" "patched-unzipped-folder" > patch.diff```
+```diff -Nrua --strip-trailing-cr "original" "patched" --exclude=".git" --exclude="texture" > patch.diff```
 
 ## Changelog
 ### v2026.10.11 Update to 0.8.31
