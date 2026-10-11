@@ -22,6 +22,10 @@ Now uses gnu diff
 ```diff -rua --strip-trailing-cr "original-unzipped-folder" "patched-unzipped-folder" > patch.diff```
 
 ## Changelog
+### v2026.10.11 Update to 0.8.31
+* **Update to ver. 0.8.31**
+* **Known issues:** enabling DLSS RR causes "no more texture units" error
+
 ### v2026.7.24 Update to 0.8.26
 * **Update to ver. 0.8.26**
 
